@@ -8,21 +8,21 @@
   --shadow: 0 1px 2px rgba(42, 18, 48, .05), 0 8px 24px rgba(42, 18, 48, .07);
   --display: "Frank Ruhl Libre", "David", "Times New Roman", serif;
   --body: "Assistant", "Heebo", "Segoe UI", Arial, sans-serif;
-  --r: 16px;
+  --r: 18px; --band: #3D1A52; --band-ink: #FFFFFF;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --bg: #150F19; --surface: #211827; --sunken: #1A1220; --ink: #F1EAF4; --muted: #AC9DB5; --line: #35283D;
     --brand: #D3B4E6; --brand-ink: #2A1136; --brand-soft: #33223F; --sun: #F0B458; --sun-soft: #3A2C12;
     --ok: #7FD6A6; --ok-soft: #173526; --warn: #F0B458; --warn-soft: #3A2C12; --wa: #7FD6A6; --bad: #FF9A8F; --bad-soft: #3D1C19;
-    --shadow: 0 1px 2px rgba(0, 0, 0, .45); color-scheme: dark;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .45); --band: #2B1239; color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
   --bg: #150F19; --surface: #211827; --sunken: #1A1220; --ink: #F1EAF4; --muted: #AC9DB5; --line: #35283D;
   --brand: #D3B4E6; --brand-ink: #2A1136; --brand-soft: #33223F; --sun: #F0B458; --sun-soft: #3A2C12;
   --ok: #7FD6A6; --ok-soft: #173526; --warn: #F0B458; --warn-soft: #3A2C12; --wa: #7FD6A6; --bad: #FF9A8F; --bad-soft: #3D1C19;
-  --shadow: 0 1px 2px rgba(0, 0, 0, .45); color-scheme: dark;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .45); --band: #2B1239; color-scheme: dark;
 }
 
 * { box-sizing: border-box; }
@@ -332,3 +332,58 @@ textarea, .field input[type="tel"] { width: 100%; padding: 11px 12px; border: 1p
 .mini .pill { align-self: flex-start; }
 .citygrid .lead { grid-column: 1 / -1; }
 .sheet .search { background: var(--bg); }
+
+/* ---------- עיצוב 3: פס מותג, מסך בית, דף מקווה עם תמונה גדולה ---------- */
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--band); }
+.top { background: var(--band); color: var(--band-ink); padding-block: 12px 10px; }
+.brand { color: var(--band-ink); }
+.brand svg { height: 50px; }
+.top .iconbtn { color: var(--band-ink); background: rgba(255, 255, 255, .12); margin-inline-start: 6px; }
+.badge { border-color: var(--band); background: #FFB84D; }
+
+.hero { background: var(--band); color: var(--band-ink); padding-block: 6px 22px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); border-radius: 0 0 28px 28px; display: flex; flex-direction: column; gap: 10px; }
+.hero h1 { font: 700 32px/1.1 var(--display); margin: 0; text-wrap: balance; }
+.hero p { margin: -4px 0 4px; opacity: .78; font-size: 15px; }
+.hero .search { border: 0; padding-block: 3px; box-shadow: 0 6px 20px rgba(0, 0, 0, .18); color: var(--muted); }
+.hero .locbar { background: rgba(255, 255, 255, .13); color: var(--band-ink); box-shadow: none; border-radius: 99px; padding: 8px 14px; }
+.hero .locbar .ic, .hero .locbar-change { color: var(--band-ink); }
+.hero .locbar-txt small { color: var(--band-ink); opacity: .75; }
+.hero .locbar-change { text-decoration: underline; text-underline-offset: 3px; }
+
+.quick { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 4px; }
+.quick button { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 12px 4px 10px; background: var(--surface); border-radius: var(--r); box-shadow: var(--shadow); font-size: 13.5px; font-weight: 700; text-align: center; }
+.quick i { width: 42px; height: 42px; border-radius: 50%; background: var(--brand-soft); color: var(--brand); display: grid; place-items: center; }
+.quick .ic { width: 22px; height: 22px; }
+
+.sechead { font: 700 20px/1.2 var(--display); margin: 8px 0 8px; }
+.carousel { display: flex; gap: 12px; overflow-x: auto; scrollbar-width: none; margin-inline: -16px; padding: 2px 16px 10px; scroll-snap-type: x proximity; }
+.carousel::-webkit-scrollbar { display: none; }
+.pcard { flex: none; width: 176px; display: flex; flex-direction: column; gap: 2px; scroll-snap-align: start; }
+.pimg { width: 100%; min-height: 0; aspect-ratio: 4 / 3; border-radius: var(--r); position: relative; box-shadow: var(--shadow); margin-bottom: 6px; }
+.pdist { position: absolute; inset-block-end: 8px; inset-inline-start: 8px; background: var(--surface); color: var(--brand); font-weight: 700; font-size: 13px; padding: 2px 9px; border-radius: 99px; }
+.pcard b { font: 700 16.5px/1.25 var(--display); }
+.pcard small { color: var(--muted); font-size: 13px; }
+
+.card { border-radius: 20px; padding: 10px; }
+.thumb { width: 96px; min-height: 96px; border-radius: 14px; }
+.listhead { margin-top: 8px; font-weight: 600; }
+
+/* דף מקווה */
+.dhero { position: relative; background: var(--band); color: var(--band-ink); }
+.dhero .gallery { gap: 0; }
+.dhero .gallery > img { width: 100%; aspect-ratio: 4 / 3; max-height: 46vh; }
+.dhero .gallery > img:not(:only-child) { width: 100%; }
+.dhero .nophoto { margin: 0; border-radius: 0; background: none; color: var(--band-ink); padding: 64px 16px 46px; }
+.dhero .nophoto svg { width: 150px; opacity: .5; }
+.dhero-bar { position: absolute; inset: 10px 10px auto; display: flex; justify-content: space-between; padding-top: env(safe-area-inset-top, 0px); }
+.fab { width: 42px; height: 42px; border-radius: 50%; background: var(--surface); color: var(--ink); display: grid; place-items: center; box-shadow: 0 2px 10px rgba(0, 0, 0, .25); margin-inline-start: 8px; }
+.dhero-bar > .fab { margin: 0; }
+.fab.fav-on { color: #C4455B; }
+.dsheet { position: relative; margin-top: -22px; border-radius: 24px 24px 0 0; background: var(--bg); padding-top: 20px; }
+.detail-name { font-size: 32px; margin: 0; }
+.actions { grid-auto-columns: 1fr; }
+.act.fav-on { color: #C4455B; }
+.dbar { display: flex; gap: 10px; padding: 10px 16px calc(10px + env(safe-area-inset-bottom, 0px)); background: var(--surface); box-shadow: 0 -1px 0 var(--line), 0 -8px 24px rgba(42, 18, 48, .06); }
+.dbar .btn { padding-block: 14px; font-size: 17px; border-radius: 14px; }
+.btn.alt { background: var(--brand-soft); color: var(--brand); }
+.h3 { font: 700 19px/1.3 var(--display); color: var(--ink); margin-top: 16px; }

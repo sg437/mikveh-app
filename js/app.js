@@ -167,6 +167,10 @@
   function renderList() {
     const items = listItems();
     const el = $('#list'); if (!el) return;
+    const feat = S.loc && !S.q.trim() && !S.filters.size ? items.filter((m) => m.photos.length).slice(0, 8) : [];
+    $('#nearby').innerHTML = feat.length ? `<div class="sechead">${T('קרובים אליך')}</div><div class="carousel">${feat.map((m) => `<button class="pcard" data-act="open" data-id="${m.id}">
+        <span class="pimg thumb none" data-thumb="${m.id}">${window.LOGO.emblem}${m.approx && km(S.loc, m) < 1 ? '' : `<span class="pdist">${fmtKm(km(S.loc, m))}</span>`}</span>
+        <b>${esc(m.full)}</b><small>${esc(m.city)}${m.sup ? ' · ' + T('בפיקוח המרכז') : ''}</small></button>`).join('')}</div>` : '';
     $('#count').textContent = items.length === MIKVAOT.length ? `${items.length} ${T('מקוואות')}` : `${items.length} ${T('מתוך')} ${MIKVAOT.length} ${T('מקוואות')}`;
     $('#sortnote').textContent = S.loc ? T('מהקרוב לרחוק') : T('לפי עיר');
     el.innerHTML = items.length ? items.slice(0, S.limit).map((m) => card(m, S.loc)).join('') + (items.length > S.limit ? `<button class="btn ghost wide" data-act="more">${T('הצגת מקוואות נוספים')} (${items.length - S.limit})</button>` : '')
@@ -181,7 +185,7 @@
         if (!url) return;
         if (el.tagName === 'IMG') { el.src = url; return; }
         const im = new Image();
-        im.onload = () => { el.style.backgroundImage = `url("${url}")`; el.classList.remove('none'); el.textContent = ''; };
+        im.onload = () => { el.style.backgroundImage = `url("${url}")`; el.classList.remove('none'); const sv = el.querySelector('svg'); if (sv) sv.remove(); };
         im.src = url;
       }).catch(() => {});
     });
@@ -198,14 +202,24 @@
   };
 
   function viewList() {
-    return `<div class="pad">
-      <h2 class="h2">${T('מאגר המקוואות')}</h2>
-      ${locBar()}${shabbatBanner()}
+    return `<section class="hero">
+      <h1>${T('מצאו מקווה קרוב')}</h1>
+      <p>${MIKVAOT.length} ${T('מקוואות')} · ${CITIES.length} ${T('יישובים')}</p>
       <label class="search">${icon('search')}<input id="q" type="search" inputmode="search" autocomplete="off" placeholder="${T('חיפוש לפי שם, עיר או רחוב')}" value="${esc(S.q)}"></label>
+      ${locBar()}
+    </section>
+    <div class="pad">
+      ${shabbatBanner()}
+      <div class="quick">
+        <button data-act="gps"><i>${icon('target')}</i><span>${T('קרוב אליי')}</span></button>
+        <button data-act="tab" data-tab="map"><i>${icon('map')}</i><span>${T('מפה')}</span></button>
+        <button data-act="tab" data-tab="trip"><i>${icon('bag')}</i><span>${T('נופש')}</span></button>
+        <button data-act="tab" data-tab="rabbis"><i>${icon('chat')}</i><span>${T('שאלה לרב')}</span></button>
+      </div>
+      <div id="nearby"></div>
       <div class="chips" role="group" aria-label="${T('סינון')}">${FILTERS.map(([k, l]) => `<button class="chip${S.filters.has(k) ? ' on' : ''}" data-act="filter" data-k="${k}" aria-pressed="${S.filters.has(k)}">${k === 'fav' ? icon('heart') : ''}${T(l)}</button>`).join('')}</div>
       <div class="listhead"><span id="count"></span><span id="sortnote"></span></div>
       <div id="list" class="list"></div>
-      ${demo ? ('<p class="demo">' + T('הנתונים המוצגים הם נתוני הדגמה בלבד.') + '</p>') : ''}
     </div>`;
   }
 
@@ -376,18 +390,19 @@
     const fav = S.favs.has(m.id), main = m.phones[0], h = hoursToday(m);
     const photo = (f) => `${SITE}/cache/w_640,h_427,mode_crop/${encodeURIComponent(f)}`;
     return `<div class="detail" role="dialog" aria-label="${esc(m.full)}">
-      <div class="detail-top">
-        <button class="iconbtn" data-act="close" aria-label="${T('חזרה')}">${icon('back', 'flip')}</button>
-        <span class="detail-top-title">${T('פרטי המקווה')}</span>
-        <span class="row">
-          <button class="iconbtn" data-act="share" data-id="${m.id}" aria-label="${T('שיתוף')}">${icon('share')}</button>
-          <button class="iconbtn${fav ? ' fav-on' : ''}" data-act="fav" data-id="${m.id}" aria-label="${fav ? T('הסרה מהשמורים') : T('שמירה')}" aria-pressed="${fav}">${icon('heart')}</button>
-        </span>
-      </div>
       <div class="detail-body">
+        <div class="dhero">
         ${m.photos.length ? `<div class="gallery"><img data-thumb="${m.id}" alt="${esc(m.full)}" onerror="this.remove()">${m.photos.slice(1).map((f) => `<img src="${photo(f)}" alt="${esc(m.full)}" loading="lazy" onerror="this.remove()">`).join('')}</div>`
-          : `<div class="nophoto">${window.LOGO.emblem}<span>${T('עדיין אין תמונות של המקווה')}</span></div>`}
-        <div class="pad">
+          : `<div class="nophoto">${window.LOGO.emblem}</div>`}
+          <div class="dhero-bar">
+            <button class="fab" data-act="close" aria-label="${T('חזרה')}">${icon('back', 'flip')}</button>
+            <span class="row">
+              <button class="fab" data-act="share" data-id="${m.id}" aria-label="${T('שיתוף')}">${icon('share')}</button>
+              <button class="fab${fav ? ' fav-on' : ''}" data-act="fav" data-id="${m.id}" aria-label="${fav ? T('הסרה מהשמורים') : T('שמירה')}" aria-pressed="${fav}">${icon('heart')}</button>
+            </span>
+          </div>
+        </div>
+        <div class="pad dsheet">
           <h2 class="detail-name">${esc(m.full)}</h2>
           <div class="detail-addr">${icon('pin')}<span>${esc(m.place)}${S.loc && m.lat != null ? ` · ${fmtKm(km(S.loc, m))} ${T('ממך')}` : ''}</span></div>
           ${m.status === 'renovation' ? `<div class="card-tags"><span class="pill warn"><i></i>${T('בשיפוץ')}</span>${m.statusNote ? `<span class="statusnote">${esc(m.statusNote)}</span>` : ''}</div>` : ''}
@@ -397,10 +412,9 @@
             : `<div class="cert no"><div class="cert-head">${icon('info')}<span><b>${T('לא בפיקוח המרכז')}</b><small>${T('מקווה זה אינו בפיקוח המרכז הארצי לטהרת המשפחה. יש לברר את הכשרות עם הרבנים המקומיים.')}</small></span></div></div>`}
 
           <div class="actions">
-            <a class="act primary" href="${wazeUrl(m)}" target="_blank" rel="noopener">${icon('nav')}<span>Waze</span></a>
             <a class="act" href="${mapsUrl(m)}" target="_blank" rel="noopener">${icon('pin')}<span>${T('מפות Google')}</span></a>
-            ${main ? `<a class="act" href="${telHref(main)}">${icon('phone')}<span>${T('חיוג')}</span></a>` : ''}
             <button class="act" data-act="share" data-id="${m.id}">${icon('share')}<span>${T('שיתוף')}</span></button>
+            <button class="act${fav ? ' fav-on' : ''}" data-act="fav" data-id="${m.id}">${icon('heart')}<span>${fav ? T('שמור') : T('שמירה')}</span></button>
           </div>
 
           ${m.hours.length ? `<h3 class="h3">${T('שעות פתיחה')}</h3>
@@ -422,6 +436,10 @@
           ${m.sup && window.qrcode ? `<button class="link center" data-act="qr" data-id="${m.id}">${icon('qr')}${T('קוד QR של המקווה')}</button>` : ''}
           <p class="demo">${m.updated ? `${T('עודכן לאחרונה:')} ${esc(m.updated)} · ` : ''}${T('המידע מאתר המרכז')}</p>
         </div>
+      </div>
+      <div class="dbar">
+        <a class="btn" href="${wazeUrl(m)}" target="_blank" rel="noopener">${icon('nav')}${T('ניווט')}</a>
+        ${main ? `<a class="btn alt" href="${telHref(main)}">${icon('phone')}${T('חיוג')}</a>` : ''}
       </div>
     </div>`;
   }

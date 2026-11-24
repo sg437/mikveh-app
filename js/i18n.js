@@ -105,6 +105,7 @@ window.I18N = {
     'הנגשה חלקית': "Partly accessible",
     'מקווה פרטי': "Private mikveh",
     'מקווה תורן': "On-call mikveh",
-    "ג'קוזי": "Jacuzzi"
+    "ג'קוזי": "Jacuzzi",
+    'מצאו מקווה קרוב': 'Find a mikveh nearby', 'יישובים': 'towns', 'קרוב אליי': 'Near me', 'קרובים אליך': 'Near you', 'ניווט': 'Navigate', 'שמור': 'Saved'
   }
 };
