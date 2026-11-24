@@ -10,7 +10,7 @@ ${r('css/styles.css')}
 <div id="app"></div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
 <script>
-${['js/data.js', 'js/sun.js', 'js/app.js'].map(r).join('\n')}
+${['js/i18n.js', 'js/data.js', 'js/sun.js', 'js/app.js'].map(r).join('\n')}
 </script>
 `;
 fs.writeFileSync(process.argv[2], out);

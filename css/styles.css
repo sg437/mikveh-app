@@ -263,3 +263,13 @@ textarea, .field input[type="tel"] { width: 100%; padding: 11px 12px; border: 1p
 .qrbox svg { display: block; width: 100%; height: auto; }
 .center { text-align: center; }
 .brand { text-align: start; }
+
+/* ---------- שפות משמאל לימין ---------- */
+[dir="ltr"] .chev { transform: none; }
+[dir="ltr"] .chev.down { transform: rotate(90deg); }
+[dir="ltr"] .ic.flip { transform: none; }
+[dir="rtl"] .ic.flip { transform: none; }
+[dir="ltr"] .detail-top .ic.flip { transform: scaleX(-1); }
+[dir="ltr"] .switchrow input:checked + i::after { transform: translateX(18px); }
+.field select { width: 100%; padding: 11px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); font: inherit; font-weight: 600; color: inherit; }
+.link.center { align-self: center; }
