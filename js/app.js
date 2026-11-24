@@ -1,6 +1,19 @@
 (function () {
   'use strict';
   const { MIKVAOT, RABBIS, CITIES, UPDATES, demo } = window.DATA;
+  const SITE = 'https://www.taharat.org.il';
+  /* מאפיינים שנגזרים מרשימת השירותים של כל מקווה */
+  MIKVAOT.forEach((m) => {
+    const sv = m.services;
+    m.chabad = sv.some((x) => x.includes('חב'));
+    m.access = sv.includes('הנגשה מלאה') ? 'full' : sv.includes('הנגשה חלקית') ? 'partial' : '';
+    m.kelim = sv.includes('מקווה כלים'); m.parking = sv.includes('חניה');
+    m.full = m.name.startsWith('מקו') ? m.name : 'מקווה ' + m.name;
+    m.place = (m.address ? m.address + ', ' : '') + m.city;
+    m.status = m.status || 'active'; m.alert = m.alert || '';
+  });
+  /* תמונות: באפליקציה נטענות מהתיקייה photos; בתצוגה המקדימה מוחלף ב-window.PHOTOS */
+  const PHOTOS = window.PHOTOS || { thumb: (id) => Promise.resolve('photos/' + id + '.jpg') };
   const I18N = window.I18N || {};
   let LANG = 'he';
   const T = (s) => (LANG === 'he' ? s : (I18N[LANG] && I18N[LANG][s]) || s);
@@ -16,6 +29,7 @@
     set(k, v) { try { localStorage.setItem('mk.' + k, JSON.stringify(v)); } catch (e) { /* אין אחסון */ } }
   };
   const km = (a, b) => {
+    if (a.lat == null || b.lat == null) return Infinity;
     const r = Math.PI / 180, dLat = (b.lat - a.lat) * r, dLng = (b.lng - a.lng) * r;
     const h = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * r) * Math.cos(b.lat * r) * Math.sin(dLng / 2) ** 2;
     return 12742 * Math.asin(Math.sqrt(h));
@@ -28,7 +42,7 @@
     const t = Math.max(0, Math.min(1, ((px - ax) * (bx - ax) + (py - ay) * (by - ay)) / len2));
     return { d: Math.hypot(px - (ax + t * (bx - ax)), py - (ay + t * (by - ay))), t };
   };
-  const fmtKm = (d) => (d < 1 ? Math.round(d * 1000) + (' ' + T('מ׳')) : d < 10 ? d.toFixed(1) + (' ' + T('ק״מ')) : Math.round(d) + (' ' + T('ק״מ')));
+  const fmtKm = (d) => (!isFinite(d) ? '' : d < 1 ? Math.round(d * 1000) + (' ' + T('מ׳')) : d < 10 ? d.toFixed(1) + (' ' + T('ק״מ')) : Math.round(d) + (' ' + T('ק״מ')));
   const TZ = 'Asia/Jerusalem';
   const fTime = new Intl.DateTimeFormat('he-IL', { hour: '2-digit', minute: '2-digit', timeZone: TZ });
   let fDay, fDate, fHeb;
@@ -41,24 +55,26 @@
     try { fHeb = new Intl.DateTimeFormat(loc + '-u-ca-hebrew', { day: 'numeric', month: 'long' }); } catch (e) { fHeb = null; }
   }
   setLang(store.get('lang', 'he'));
-  const sunsetStr = (date, p) => { const s = window.Sun.sunset(date, p.lat, p.lng); return s ? fTime.format(s) : '—'; };
-  const telHref = (n) => 'tel:' + n.replace(/[^\d+]/g, '');
+  const sunsetStr = (date, p) => { if (p.lat == null) return '—'; const s = window.Sun.sunset(date, p.lat, p.lng); return s ? fTime.format(s) : '—'; };
+  const telHref = (n) => 'tel:' + n.replace(/[^\d+*]/g, '');
   const isoDate = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
   const parseDate = (s) => { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d); };
   const byId = (id) => MIKVAOT.find((m) => m.id === id);
   const city = (n) => CITIES.find((c) => c.name === n) || CITIES[0];
   /*noT*/ const regionOf = (p) => (p.lat > 32.45 ? 'צפון' : p.lat < 31.55 ? 'דרום' : p.lng > 34.95 && p.lat < 31.95 ? 'ירושלים והסביבה' : 'מרכז');
-  const mapsUrl = (m) => `https://www.google.com/maps/dir/?api=1&destination=${m.lat},${m.lng}`;
+  const mapsUrl = (m) => 'https://www.google.com/maps/dir/?api=1&destination=' + encodeURIComponent(m.place);
+  const wazeUrl = (m) => 'https://waze.com/ul?q=' + encodeURIComponent(m.place) + '&navigate=yes';
 
-  /* שעות הפתיחה להיום, מחושבות מהשקיעה במקום */
+  /* שעות הפתיחה: השורה שמתאימה להיום לפי עונה ויום בשבוע */
+  /*noT-start*/
+  const isWinter = (d) => new Intl.DateTimeFormat('en-US', { timeZone: TZ, timeZoneName: 'short' }).format(d).includes('GMT+2');
   function hoursToday(m, now = new Date()) {
-    if (m.status !== 'active') return null;
-    const dow = now.getDay();
-    if (dow === 5) return { text: T('ליל שבת · בתיאום מראש בלבד'), special: true };
-    const ss = window.Sun.sunset(now, m.lat, m.lng); if (!ss) return null;
-    const open = new Date(+ss + (m.openAfterSunset + (dow === 6 ? 50 : 0)) * 6e4), close = new Date(+open + m.openMinutes * 6e4);
-    return { open, close, range: fTime.format(open) + '–' + fTime.format(close), openNow: now >= open && now < close, later: now < open, motzash: dow === 6 };
+    if (!m.hours.length) return null;
+    const dow = now.getDay(), want = dow === 5 ? 'ערב שבת' : dow === 6 ? 'מוצ"ש' : isWinter(now) ? 'חורף' : 'קיץ';
+    const h = m.hours.find((x) => x.label === want) || m.hours.find((x) => !x.label);
+    return h ? { label: h.label, value: h.value } : null;
   }
+  /*noT-end*/
 
   const I = {
     search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
@@ -97,7 +113,7 @@
     favs: new Set(store.get('favs', [])),
     loc: store.get('loc', null),            // { lat, lng, label, gps }
     detail: null, sheet: null, sheetData: null,
-    mapCity: null, rabbiArea: null,
+    mapCity: null, rabbiArea: null, limit: 30,
     bigText: store.get('bigText', false), notify: store.get('notify', false),
     seen: store.get('seen', ''),
     trip: Object.assign({ mode: 'area', city: 'צפת', fromCity: 'ירושלים', radius: 25, from: isoDate(today), to: isoDate(new Date(+today + 3 * 864e5)) }, store.get('trip', {}))
@@ -106,48 +122,42 @@
   /*noT-start*/
   const FILTERS = [
     ['fav', 'שמורים', (m) => S.favs.has(m.id)],
-    ['open', 'פתוח עכשיו', (m) => (hoursToday(m) || {}).openNow],
-    ['active', 'פעיל', (m) => m.status === 'active'],
+    ['sup', 'בפיקוח המרכז', (m) => m.sup],
+    ['photos', 'עם תמונות', (m) => m.photos.length],
     ['chabad', 'בור חב״ד', (m) => m.chabad],
-    ['chazon', 'לשיטת חזו״א', (m) => m.chazonIsh],
-    ['filter', 'עם פילטר', (m) => m.filter],
-    ['access', 'נגיש', (m) => m.accessible],
-    ['booking', 'הזמנת תור', (m) => m.booking && m.booking.type !== 'none'],
-    ['kelim', 'מקווה כלים', (m) => m.kelim]
+    ['access', 'נגיש', (m) => m.access],
+    ['kelim', 'מקווה כלים', (m) => m.kelim],
+    ['parking', 'חניה', (m) => m.parking]
   ];
-
   /*noT-end*/
 
   /* ---------- רכיבים ---------- */
-  const statusPill = (m) => {
-    if (m.status !== 'active') return ('<span class="pill warn"><i></i>' + T('בשיפוץ') + '</span>');
-    const h = hoursToday(m);
-    return h && h.openNow ? ('<span class="pill ok"><i></i>' + T('פתוח עכשיו') + '</span>') : ('<span class="pill ok"><i></i>' + T('פעיל') + '</span>');
-  };
-  const tags = (m) => [m.chabad && T('בור חב״ד'), m.chazonIsh && T('חזו״א'), m.filter && T('פילטר'), m.accessible && T('נגיש')].filter(Boolean)
-    .map((t) => `<span class="tag">${t}</span>`).join('');
+  const supPill = (m) => (m.sup ? `<span class="pill ok">${icon('shield')}${T('בפיקוח המרכז')}</span>` : `<span class="pill mute">${T('לא בפיקוח המרכז')}</span>`);
+  const tags = (m) => [m.status === 'renovation' && `<span class="pill warn"><i></i>${T('בשיפוץ')}</span>`,
+    ...[m.chabad && T('בור חב״ד'), m.access === 'full' && T('נגיש'), m.access === 'partial' && T('נגיש חלקית'), m.kelim && T('מקווה כלים')].filter(Boolean).map((t) => `<span class="tag">${t}</span>`)].filter(Boolean).join('');
   const todayLine = (m) => {
-    if (m.status !== 'active') return m.statusNote ? `<span class="today warnc">${esc(m.statusNote)}</span>` : '';
     const h = hoursToday(m); if (!h) return '';
-    return `<span class="today">${icon('clock')}${h.special ? h.text : `${h.motzash ? T('מוצ״ש') : T('היום')} <bdi dir="ltr">${h.range}</bdi>`}</span>`;
+    return `<span class="today">${icon('clock')}<span>${h.label ? T(h.label) + ': ' : ''}${esc(h.value)}</span></span>`;
   };
+  const thumb = (m) => `<span class="thumb none"${m.photos.length ? ` data-thumb="${m.id}"` : ''}>${window.LOGO.emblem}</span>`;
 
   function card(m, origin, distText) {
-    const d = distText || (origin ? fmtKm(km(origin, m)) : '');
+    const dk = origin ? km(origin, m) : Infinity, d = distText || (m.approx && dk < 1 ? '' : fmtKm(dk));
     return `<button class="card" data-act="open" data-id="${m.id}">
+      ${thumb(m)}
       <span class="card-main">
-        <span class="card-name">${esc(m.name)}</span>
-        <span class="card-sub">${esc(m.city)} · ${esc(m.address)}</span>
+        <span class="card-name">${esc(m.full)}</span>
+        <span class="card-sub">${esc(m.place)}</span>
         ${m.alert ? `<span class="alertline">${icon('alert')}${esc(m.alert)}</span>` : todayLine(m)}
-        <span class="card-tags">${statusPill(m)}${tags(m)}</span>
+        <span class="card-tags">${supPill(m)}${tags(m)}</span>
       </span>
-      <span class="card-side">${d ? `<span class="dist">${d}</span>` : ''}${S.favs.has(m.id) ? icon('heart', 'fav-on') : ''}${icon('back', 'chev')}</span>
+      <span class="card-side">${d ? `<span class="dist">${d}</span>` : ''}${S.favs.has(m.id) ? icon('heart', 'fav-on') : ''}</span>
     </button>`;
   }
 
   function listItems() {
     const q = S.q.trim();
-    let items = MIKVAOT.filter((m) => (!q || (m.name + ' ' + m.city + ' ' + m.address).includes(q)) &&
+    let items = MIKVAOT.filter((m) => (!q || (m.full + ' ' + m.place).includes(q)) &&
       [...S.filters].every((f) => FILTERS.find((x) => x[0] === f)[2](m)));
     if (S.loc) items = items.slice().sort((a, b) => km(S.loc, a) - km(S.loc, b));
     else items = items.slice().sort((a, b) => a.city.localeCompare(b.city, 'he') || a.name.localeCompare(b.name, 'he'));
@@ -157,10 +167,24 @@
   function renderList() {
     const items = listItems();
     const el = $('#list'); if (!el) return;
-    $('#count').textContent = items.length === MIKVAOT.length ? `${items.length} ${T('מקוואות בפיקוח')}` : `${items.length} ${T('מתוך')} ${MIKVAOT.length} ${T('מקוואות')}`;
+    $('#count').textContent = items.length === MIKVAOT.length ? `${items.length} ${T('מקוואות')}` : `${items.length} ${T('מתוך')} ${MIKVAOT.length} ${T('מקוואות')}`;
     $('#sortnote').textContent = S.loc ? T('מהקרוב לרחוק') : T('לפי עיר');
-    el.innerHTML = items.length ? items.map((m) => card(m, S.loc)).join('')
+    el.innerHTML = items.length ? items.slice(0, S.limit).map((m) => card(m, S.loc)).join('') + (items.length > S.limit ? `<button class="btn ghost wide" data-act="more">${T('הצגת מקוואות נוספים')} (${items.length - S.limit})</button>` : '')
       : `<div class="empty">${S.filters.has('fav') && !S.favs.size ? T('עוד לא שמרתם מקוואות. לחיצה על הלב בדף המקווה שומרת אותו כאן.') : T('לא נמצאו מקוואות מתאימים.')}<br><button class="link" data-act="clear">${T('ניקוי החיפוש והסינון')}</button></div>`;
+    hydrate();
+  }
+  /* טעינת התמונות הממוזערות אחרי כל ציור */
+  function hydrate() {
+    document.querySelectorAll('[data-thumb]:not([data-done])').forEach((el) => {
+      el.dataset.done = '1';
+      PHOTOS.thumb(el.dataset.thumb).then((url) => {
+        if (!url) return;
+        if (el.tagName === 'IMG') { el.src = url; return; }
+        const im = new Image();
+        im.onload = () => { el.style.backgroundImage = `url("${url}")`; el.classList.remove('none'); el.textContent = ''; };
+        im.src = url;
+      }).catch(() => {});
+    });
   }
 
   const locBar = () => `<button class="locbar" data-act="pickloc">
@@ -175,6 +199,7 @@
 
   function viewList() {
     return `<div class="pad">
+      <h2 class="h2">${T('מאגר המקוואות')}</h2>
       ${locBar()}${shabbatBanner()}
       <label class="search">${icon('search')}<input id="q" type="search" inputmode="search" autocomplete="off" placeholder="${T('חיפוש לפי שם, עיר או רחוב')}" value="${esc(S.q)}"></label>
       <div class="chips" role="group" aria-label="${T('סינון')}">${FILTERS.map(([k, l]) => `<button class="chip${S.filters.has(k) ? ' on' : ''}" data-act="filter" data-k="${k}" aria-pressed="${S.filters.has(k)}">${k === 'fav' ? icon('heart') : ''}${T(l)}</button>`).join('')}</div>
@@ -189,30 +214,30 @@
   const mx = (lng) => (lng - MAP.lng0) * 0.853 * MAP.k, my = (lat) => (MAP.lat0 - lat) * MAP.k;
   const OUTLINE = [[35.10, 33.09], [35.07, 32.92], [34.99, 32.83], [34.95, 32.82], [34.92, 32.60], [34.85, 32.33], [34.76, 32.07], [34.63, 31.80], [34.54, 31.67], [34.49, 31.60], [34.27, 31.22], [34.56, 30.40], [34.90, 29.50], [34.97, 29.55], [35.15, 30.20], [35.33, 30.80], [35.42, 31.15], [35.50, 31.50], [35.55, 32.00], [35.57, 32.40], [35.62, 32.68], [35.88, 32.75], [35.90, 33.20], [35.80, 33.33], [35.62, 33.26], [35.55, 33.27], [35.50, 33.09]];
   function viewMap() {
-    const groups = {};
-    MIKVAOT.forEach((m) => { (groups[m.city] = groups[m.city] || []).push(m); });
-    const names = Object.keys(groups);
-    const sel = groups[S.mapCity] ? S.mapCity : (S.loc ? names.reduce((a, n) => (km(S.loc, city(n)) < km(S.loc, city(a)) ? n : a)) : 'ירושלים'); /*noT*/
-    const pts = names.map((n) => { const g = groups[n]; return { n, c: g.length, x: mx(g.reduce((s, m) => s + m.lng, 0) / g.length), y: my(g.reduce((s, m) => s + m.lat, 0) / g.length) }; })
-      .sort((a, b) => (a.n === sel) - (b.n === sel));
+    const sel = CITIES.find((c) => c.name === S.mapCity) || (S.loc ? nearestCity(S.loc) : city('ירושלים')); /*noT*/
+    const here = MIKVAOT.filter((m) => m.city === sel.name);
+    const near = CITIES.filter((c) => c !== sel).map((c) => ({ c, d: km(sel, c) })).sort((a, b) => a.d - b.d).slice(0, 6);
     return `<div class="pad">
       <h2 class="h2">${T('מפת המקוואות')}</h2>
       <div class="mapwrap">
-        <svg class="map" viewBox="0 0 ${MAP.w} ${MAP.h}" role="group" aria-label="${T('מפה סכמטית של הארץ')}">
+        <svg class="map" viewBox="0 0 ${MAP.w} ${MAP.h}" data-act="maptap" role="img" aria-label="${T('מפה סכמטית של הארץ')}">
           <polygon class="land" points="${OUTLINE.map(([g, t]) => mx(g).toFixed(1) + ',' + my(t).toFixed(1)).join(' ')}"/>
           <ellipse class="water" cx="${mx(35.59)}" cy="${my(32.82)}" rx="5" ry="8.5"/>
           <ellipse class="water" cx="${mx(35.48)}" cy="${my(31.5)}" rx="4.5" ry="24"/>
+          ${CITIES.map((c) => `<circle class="pt" cx="${mx(c.lng).toFixed(1)}" cy="${my(c.lat).toFixed(1)}" r="${(1.5 + Math.min(c.count, 12) * 0.22).toFixed(1)}"/>`).join('')}
           ${S.loc ? `<circle class="me" cx="${mx(S.loc.lng)}" cy="${my(S.loc.lat)}" r="4"/>` : ''}
-          ${pts.map((p) => `<g class="dot${p.n === sel ? ' on' : ''}" data-act="mapcity" data-c="${esc(p.n)}" tabindex="0" role="button" aria-label="${esc(p.n)}, ${p.c} ${T('מקוואות')}">
-            <circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="${p.n === sel ? 11 : 8.5}"/><text x="${p.x.toFixed(1)}" y="${(p.y + 3.6).toFixed(1)}">${p.c}</text></g>`).join('')}
+          <circle class="sel" cx="${mx(sel.lng).toFixed(1)}" cy="${my(sel.lat).toFixed(1)}" r="6"/>
         </svg>
         <div class="mapside">
-          <div class="mapcity">${esc(sel)}</div>
-          <div class="mapcount">${groups[sel].length} ${T('מקוואות')}${S.loc ? ' · ' + fmtKm(km(S.loc, city(sel))) + (' ' + T('ממך')) : ''}</div>
-          ${groups[sel].map((m) => `<button class="mini" data-act="open" data-id="${m.id}"><b>${esc(m.name)}</b>${m.status === 'active' ? todayLine(m) : ('<span class="today warnc">' + T('בשיפוץ') + '</span>')}</button>`).join('')}
-          <p class="note">${T('לחיצה על עיגול מציגה את המקוואות ביישוב. המספר הוא מספר המקוואות.')}</p>
+          <div class="mapcity">${esc(sel.name)}</div>
+          <div class="mapcount">${here.length} ${T('מקוואות')}${S.loc ? ' · ' + fmtKm(km(S.loc, sel)) + (' ' + T('ממך')) : ''}</div>
+          ${here.slice(0, 8).map((m) => `<button class="mini" data-act="open" data-id="${m.id}"><b>${esc(m.full)}</b>${supPill(m)}</button>`).join('')}
+          ${here.length > 8 ? `<button class="link" data-act="mapall" data-c="${esc(sel.name)}">${T('כל המקוואות ביישוב')} (${here.length})</button>` : ''}
+          <div class="lbl">${T('יישובים קרובים')}</div>
+          <div class="chips wrap">${near.map((x) => `<button class="chip" data-act="mapcity" data-c="${esc(x.c.name)}">${esc(x.c.name)}</button>`).join('')}</div>
         </div>
       </div>
+      <p class="note">${T('לחיצה על המפה בוחרת את היישוב הקרוב לנקודה. כל נקודה היא יישוב שיש בו מקווה.')}</p>
     </div>`;
   }
 
@@ -229,7 +254,7 @@
   function tripText() {
     const t = S.trip, res = tripResults();
     return [`${T('תוכנית נופש:')} ${t.mode === 'route' ? t.fromCity + ' ← ' + t.city : t.city}`, `${fDay.format(parseDate(t.from))} – ${fDay.format(parseDate(t.to))}`, '',
-      ...res.map((x) => `• ${x.m.name}, ${x.m.address}, ${x.m.city} — ${x.m.phones[0].number}${x.m.status !== 'active' ? (' (' + T('בשיפוץ)')) : ''}`), '', T('מתוך מאגר המקוואות שבפיקוח טהרת המשפחה')].join('\n');
+      ...res.map((x) => `• ${x.m.full}, ${x.m.place}${x.m.phones[0] ? ' — ' + x.m.phones[0] : ''}`), '', T('מתוך מאגר המקוואות של המרכז הארצי למען טהרת המשפחה')].join('\n');
   }
   function viewTrip() {
     const t = S.trip, c = city(t.city), res = tripResults(), route = t.mode === 'route';
@@ -238,7 +263,7 @@
     const sel = (label, act, name) => `<div class="field"><span class="lbl">${label}</span><button class="select" data-act="${act}">${icon('pin')}<span>${esc(name)}</span>${icon('back', 'chev down')}</button></div>`;
     return `<div class="pad">
       <h2 class="h2">${T('תכנון נופש')}</h2>
-      <p class="lead">${T('רואים מראש אילו מקוואות בפיקוח נמצאים ביעד או בדרך אליו.')}</p>
+      <p class="lead">${T('רואים מראש אילו מקוואות נמצאים ביעד או בדרך אליו.')}</p>
       <div class="form">
         <div class="seg two"><button class="${route ? '' : 'on'}" data-act="tripmode" data-m="area">${T('סביב היעד')}</button><button class="${route ? 'on' : ''}" data-act="tripmode" data-m="route">${T('לאורך הדרך')}</button></div>
         ${route ? sel(T('יוצאים מ־'), 'tripfrom', t.fromCity) : ''}
@@ -250,8 +275,8 @@
           <label class="field"><span class="lbl">${T('עד תאריך')}</span><input id="tto" type="date" value="${esc(t.to)}" min="${esc(t.from)}"></label>
         </div>
       </div>
-      <div class="listhead"><span>${res.length ? `${res.length} ${T('מקוואות')} ${route ? `${T('בדרך מ')}${esc(t.fromCity)} ${T('ל')}${esc(c.name)}` : (T('באזור') + ' ') + esc(c.name)}` : T('אין מקווה בפיקוח בטווח שנבחר')}</span></div>
-      <div class="list">${res.map((x) => card(x.m, null, x.label)).join('') || `<div class="empty">${T('נסו להגדיל את המרחק, או פנו לרבנים לקבלת הכוונה.')}<br><button class="link" data-act="tab" data-tab="rabbis">${T('יצירת קשר עם הרבנים')}</button></div>`}</div>
+      <div class="listhead"><span>${res.length ? `${res.length} ${T('מקוואות')} ${route ? `${T('בדרך מ')}${esc(t.fromCity)} ${T('ל')}${esc(c.name)}` : (T('באזור') + ' ') + esc(c.name)}` : T('אין מקווה בטווח שנבחר')}</span></div>
+      <div class="list">${res.slice(0, 40).map((x) => card(x.m, null, x.label)).join('') || `<div class="empty">${T('נסו להגדיל את המרחק, או פנו לרבנים לקבלת הכוונה.')}<br><button class="link" data-act="tab" data-tab="rabbis">${T('יצירת קשר עם הרבנים')}</button></div>`}</div>
       ${route ? ('<p class="note">' + T('המסלול מחושב בקו ישר בין שני היישובים, בקירוב.') + '</p>') : ''}
       ${res.length ? `<button class="btn wide" data-act="sharetrip">${icon('share')}${T('שיתוף התוכנית')}</button>` : ''}
       ${days.length ? `<h3 class="h3">${T('שקיעה ב')}${esc(c.name)} ${T('בימי הנופש')}</h3>
@@ -277,24 +302,26 @@
   }
 
   /* ---------- רבנים ---------- */
-  /*noT*/ const AREAS = ['הכול', 'ירושלים והסביבה', 'מרכז', 'צפון', 'דרום'];
   const rabbiCard = (r) => `<div class="rabbi">
-        <div class="rabbi-head"><div class="rabbi-name">${esc(r.name)}</div><span class="tag">${esc(T(r.area))}</span></div>
-        <div class="rabbi-sub">${esc(r.role)} · ${esc(r.hours)}</div>
-        ${r.phone ? `<div class="numrow"><span class="num" dir="ltr">${esc(r.phone)}</span><button class="iconbtn sm" data-act="copy" data-v="${esc(r.phone)}" aria-label="${T('העתקת המספר')}">${icon('copy')}</button></div>` : ''}
+        <div class="rabbi-head"><div class="rabbi-name">${esc(r.name)}</div></div>
+        ${r.role || r.hours ? `<div class="rabbi-sub">${esc([r.role, r.hours].filter(Boolean).join(' · '))}</div>` : ''}
+        ${r.phone ? `<div class="numrow"><span class="num big" dir="ltr">${esc(r.phone)}</span><button class="iconbtn sm" data-act="copy" data-v="${esc(r.phone)}" aria-label="${T('העתקת המספר')}">${icon('copy')}</button></div>` : ''}
         <div class="btnrow">
           ${r.phone ? `<a class="btn" href="${telHref(r.phone)}">${icon('phone')}${T('חיוג')}</a>` : ''}
           ${r.whatsapp ? `<a class="btn wa" href="https://wa.me/${esc(r.whatsapp)}" target="_blank" rel="noopener">${icon('chat')}${T('וואטסאפ')}</a>` : ''}
         </div></div>`;
   function viewRabbis() {
-    /*noT*/ const area = S.rabbiArea || (S.loc ? regionOf(S.loc) : 'הכול');
-    /*noT*/ const list = RABBIS.filter((r) => area === 'הכול' || r.area === area || r.area === 'ארצי');
     return `<div class="pad">
-      <h2 class="h2">${T('רבני טהרת המשפחה')}</h2>
-      <p class="lead">${T('מענה לשאלות בטלפון או בוואטסאפ, לפי אזור. הפנייה דיסקרטית.')}</p>
-      <div class="chips" role="group" aria-label="${T('אזור')}">${AREAS.map((a) => `<button class="chip${a === area ? ' on' : ''}" data-act="rarea" data-a="${a}">${T(a)}</button>`).join('')}</div>
-      <div class="list">${list.map(rabbiCard).join('')}</div>
-      ${demo ? ('<p class="demo">' + T('שמות ומספרים להדגמה בלבד.') + '</p>') : ''}
+      <h2 class="h2">${T('שאלות לרב')}</h2>
+      <p class="lead">${T('רבני המרכז הארצי למען טהרת המשפחה עונים לשאלות בטלפון ובכתב. הפנייה דיסקרטית.')}</p>
+      <div class="list">${RABBIS.map(rabbiCard).join('')}
+        <div class="rabbi">
+          <div class="rabbi-name">${T('שאלה בכתב')}</div>
+          <div class="rabbi-sub">${T('טופס השאלות באתר המרכז, או בדואר אלקטרוני')}</div>
+          <div class="numrow"><span class="num" dir="ltr">lf@taharat.org</span><button class="iconbtn sm" data-act="copy" data-v="lf@taharat.org" data-msg="${T('הכתובת הועתקה')}" aria-label="${T('העתקה')}">${icon('copy')}</button></div>
+          <div class="btnrow"><a class="btn" href="${SITE}/askrabbie" target="_blank" rel="noopener">${icon('chat')}${T('שליחת שאלה באתר')}</a></div>
+        </div>
+      </div>
     </div>`;
   }
 
@@ -304,6 +331,7 @@
       <h2 class="h2">${T('עדכונים')}</h2>
       <label class="switchrow"><span><b>${T('התראות על מקוואות שמורים')}</b><small>${T('שינוי שעות, סגירה זמנית ופתיחה מחדש')}</small></span><input id="notify" type="checkbox" ${S.notify ? 'checked' : ''}><i></i></label>
       ${S.notify ? ('<p class="note">' + T('ההעדפה נשמרה. ההתראות עצמן יופעלו בגרסת החנות.') + '</p>') : ''}
+      ${UPDATES.length ? '' : `<div class="empty">${T('אין כרגע עדכונים. הודעות על שינויי שעות וסגירות יופיעו כאן.')}</div>`}
       <div class="list">${UPDATES.map((u) => { const m = u.mikveh && byId(u.mikveh); return `<${m ? `button data-act="open" data-id="${m.id}"` : 'div'} class="update${m && S.favs.has(m.id) ? ' mine' : ''}">
         <span class="update-date">${fDay.format(parseDate(u.date))}${m && S.favs.has(m.id) ? (' · ' + T('מקווה שמור')) : ''}</span>
         <b>${esc(u.title)}</b><span>${esc(u.body)}</span></${m ? 'button' : 'div'}>`; }).join('')}</div>
@@ -317,7 +345,7 @@
       <h3 class="h3">${T('פרטיות')}</h3>
       <div class="notes"><b>${T('האפליקציה לא אוספת עליכם מידע.')}</b><br>${T('אין הרשמה ואין חשבון. המיקום משמש רק לחישוב מרחקים וזמנים בתוך המכשיר ואינו נשלח לשום מקום. המקוואות השמורים ותוכנית הנופש נשמרים במכשיר בלבד.')}</div>
       <h3 class="h3">${T('על המאגר')}</h3>
-      <div class="notes">${T('כל המקוואות המופיעים כאן נמצאים בפיקוח טהרת המשפחה. בכל דף מקווה מופיעים מועד הביקורת האחרונה ותוקף הפיקוח. המידע נשמר במכשיר וזמין גם בלי קליטה.')}</div>
+      <div class="notes">${T('המאגר כולל את המקוואות המופיעים באתר המרכז הארצי למען טהרת המשפחה. בכל דף מקווה מצוין אם הוא בפיקוח ועד הכשרות של המרכז. המידע נשמר במכשיר וזמין גם בלי קליטה.')}</div>
       <button class="btn ghost wide" data-act="tab" data-tab="rabbis">${icon('chat')}${T('יצירת קשר')}</button>
       <button class="link center" data-act="tab" data-tab="admin">${T('כניסת מנהלים')}</button>
       ${demo ? ('<p class="demo">' + T('גרסת הדגמה · כל הנתונים לדוגמה בלבד') + '</p>') : ''}
@@ -345,11 +373,9 @@
 
   /* ---------- דף מקווה ---------- */
   function viewDetail(m) {
-    const fav = S.favs.has(m.id), main = (m.phones[0] || {}).number, h = hoursToday(m);
-    const yes = (v) => (v ? `<b class="yes">${icon('check')}${T('יש')}</b>` : ('<b class="no">' + T('אין') + '</b>'));
-    const book = m.booking || { type: 'none' };
-    const rabbi = RABBIS.find((r) => r.area === regionOf(m));
-    return `<div class="detail" role="dialog" aria-label="${esc(m.name)}">
+    const fav = S.favs.has(m.id), main = m.phones[0], h = hoursToday(m);
+    const photo = (f) => `${SITE}/cache/w_640,h_427,mode_crop/${encodeURIComponent(f)}`;
+    return `<div class="detail" role="dialog" aria-label="${esc(m.full)}">
       <div class="detail-top">
         <button class="iconbtn" data-act="close" aria-label="${T('חזרה')}">${icon('back', 'flip')}</button>
         <span class="detail-top-title">${T('פרטי המקווה')}</span>
@@ -359,62 +385,42 @@
         </span>
       </div>
       <div class="detail-body">
-        <div class="gallery">${(m.photos.length ? m.photos.map((p) => `<img src="${esc(p)}" alt="${esc(m.name)}">`) : ['', '', '']
-          .map((_, i) => `<div class="ph ph${i}"><span>${i === 0 ? T('תמונות המקווה יתווספו כאן') : ''}</span></div>`)).join('')}</div>
+        ${m.photos.length ? `<div class="gallery"><img data-thumb="${m.id}" alt="${esc(m.full)}" onerror="this.remove()">${m.photos.slice(1).map((f) => `<img src="${photo(f)}" alt="${esc(m.full)}" loading="lazy" onerror="this.remove()">`).join('')}</div>`
+          : `<div class="nophoto">${window.LOGO.emblem}<span>${T('עדיין אין תמונות של המקווה')}</span></div>`}
         <div class="pad">
-          <h2 class="detail-name">${esc(m.name)}</h2>
-          <div class="detail-addr">${esc(m.address)}, ${esc(m.city)}${S.loc ? ` · ${fmtKm(km(S.loc, m))} ${T('ממך')}` : ''}</div>
-          <div class="card-tags">${statusPill(m)}${m.statusNote ? `<span class="statusnote">${esc(m.statusNote)}</span>` : ''}</div>
+          <h2 class="detail-name">${esc(m.full)}</h2>
+          <div class="detail-addr">${icon('pin')}<span>${esc(m.place)}${S.loc && m.lat != null ? ` · ${fmtKm(km(S.loc, m))} ${T('ממך')}` : ''}</span></div>
+          ${m.status === 'renovation' ? `<div class="card-tags"><span class="pill warn"><i></i>${T('בשיפוץ')}</span>${m.statusNote ? `<span class="statusnote">${esc(m.statusNote)}</span>` : ''}</div>` : ''}
           ${m.alert ? `<div class="banner bad">${icon('alert')}<span>${esc(m.alert)}</span></div>` : ''}
-          ${h && !m.alert ? `<div class="todaybox${h.openNow ? ' open' : ''}">${icon('clock')}<span><small>${h.special ? T('הערב') : h.openNow ? T('פתוח עכשיו') : h.later ? T('ייפתח הערב') : T('היה פתוח היום')}</small><b>${h.special ? h.text : `<bdi dir="ltr">${h.range}</bdi>`}</b></span><span class="todaybox-sun">${icon('sun')}${T('שקיעה')} ${sunsetStr(today, m)}</span></div>` : ''}
+
+          ${m.sup ? `<div class="cert"><div class="cert-head">${icon('shield')}<span><b>${T('בפיקוח המרכז')}</b><small>${T('מפוקח על ידי ועד הכשרות של המרכז הארצי לטהרת המשפחה')}</small></span></div></div>`
+            : `<div class="cert no"><div class="cert-head">${icon('info')}<span><b>${T('לא בפיקוח המרכז')}</b><small>${T('מקווה זה אינו בפיקוח המרכז הארצי לטהרת המשפחה. יש לברר את הכשרות עם הרבנים המקומיים.')}</small></span></div></div>`}
 
           <div class="actions">
-            <a class="act primary" href="https://waze.com/ul?ll=${m.lat},${m.lng}&navigate=yes" target="_blank" rel="noopener">${icon('nav')}<span>Waze</span></a>
+            <a class="act primary" href="${wazeUrl(m)}" target="_blank" rel="noopener">${icon('nav')}<span>Waze</span></a>
             <a class="act" href="${mapsUrl(m)}" target="_blank" rel="noopener">${icon('pin')}<span>${T('מפות Google')}</span></a>
             ${main ? `<a class="act" href="${telHref(main)}">${icon('phone')}<span>${T('חיוג')}</span></a>` : ''}
             <button class="act" data-act="share" data-id="${m.id}">${icon('share')}<span>${T('שיתוף')}</span></button>
           </div>
 
-          ${book.type === 'link' ? `<a class="btn wide" href="${esc(book.value)}" target="_blank" rel="noopener">${icon('cal')}${T('הזמנת תור באתר')}</a>`
-            : book.type === 'phone' ? `<a class="btn wide" href="${telHref(book.value)}">${icon('cal')}${T('הזמנת תור בטלפון')} <span dir="ltr">${esc(book.value)}</span></a>`
-            : m.status === 'active' ? ('<div class="infobox">' + T('אין צורך בהזמנת תור.') + '</div>') : ''}
-          ${m.donateUrl ? `<a class="btn sunbtn wide" href="${esc(m.donateUrl)}" target="_blank" rel="noopener">${icon('gift')}${T('השתתפות בשיפוץ המקווה')}</a>` : ''}
+          ${m.hours.length ? `<h3 class="h3">${T('שעות פתיחה')}</h3>
+          <div class="spec hours">${m.hours.map((x) => `<div class="${h && x.label === h.label && x.value === h.value ? 'now' : ''}">${x.label ? `<span>${esc(T(x.label))}</span>` : ''}<b>${esc(x.value)}</b></div>`).join('')}
+            ${m.lat != null ? `<div class="sunline"><span>${icon('sun')}${T('שקיעה היום במקום')}</span><b>${sunsetStr(today, m)}</b></div>` : ''}</div>` : ''}
 
-          <h3 class="h3">${T('פיקוח')}</h3>
-          <div class="cert">
-            <div class="cert-head">${icon('shield')}<span><b>${T('בפיקוח טהרת המשפחה')}</b><small>${T('בתוקף עד')} ${fDate.format(parseDate(m.validUntil))}</small></span></div>
-            <div class="spec flat">
-              <div><span>${T('ביקורת אחרונה')}</span><b>${fDate.format(parseDate(m.lastInspection))}</b></div>
-              <div><span>${T('הרב המפקח')}</span><b>${esc(m.supervisor)}</b></div>
-            </div>
-            ${window.qrcode ? `<button class="link" data-act="qr" data-id="${m.id}">${icon('qr')}${T('קוד QR של המקווה')}</button>` : ''}
-          </div>
+          ${m.phones.length || m.contact ? `<h3 class="h3">${T('טלפונים')}</h3>
+          <div class="spec">${m.phones.map((n) => `<div><span>${T('המקווה')}</span><span class="numrow"><a class="num" dir="ltr" href="${telHref(n)}">${esc(n)}</a><button class="iconbtn sm" data-act="copy" data-v="${esc(n)}" aria-label="${T('העתקת המספר')}">${icon('copy')}</button></span></div>`).join('')}
+            ${m.contact ? `<div><span>${T('איש קשר')}${m.contact.name ? ' · ' + esc(m.contact.name) : ''}</span>${m.contact.phone ? `<span class="numrow"><a class="num" dir="ltr" href="${telHref(m.contact.phone)}">${esc(m.contact.phone)}</a><button class="iconbtn sm" data-act="copy" data-v="${esc(m.contact.phone)}" aria-label="${T('העתקת המספר')}">${icon('copy')}</button></span>` : ''}</div>` : ''}</div>` : ''}
 
-          <h3 class="h3">${T('פרטי המקווה')}</h3>
-          <div class="spec">
-            <div><span>${T('בור חב״ד (בור על גבי בור)')}</span>${yes(m.chabad)}</div>
-            <div><span>${T('לשיטת החזון איש')}</span>${yes(m.chazonIsh)}</div>
-            <div><span>${T('פילטר (מערכת סינון)')}</span>${yes(m.filter)}</div>
-            <div><span>${T('מקווה כלים')}</span>${yes(m.kelim)}</div>
-          </div>
-
-          <h3 class="h3">${T('מידע מעשי')}</h3>
-          <div class="spec">
-            <div><span>${T('נגישות')}</span><b class="${m.accessible ? 'yes' : ''}">${m.accessible ? icon('check') : ''}${esc(m.accessNote)}</b></div>
-            ${m.price ? `<div><span>${T('מחיר')}</span><b>${m.price} ₪</b></div><div><span>${T('תשלום')}</span><b>${esc(m.payment.join(', '))}</b></div>` : ''}
-            <div><span>${T('חניה')}</span><b>${esc(m.parking)}</b></div>
-          </div>
-
-          <h3 class="h3">${T('שעות פתיחה')}</h3>
-          <div class="spec">${m.hours.map((x) => `<div><span>${esc(x.label)}</span><b>${esc(x.value)}</b></div>`).join('')}</div>
-
-          <h3 class="h3">${T('טלפונים')}</h3>
-          <div class="spec">${m.phones.map((p) => `<div><span>${esc(p.label)}</span><span class="numrow"><a class="num" dir="ltr" href="${telHref(p.number)}">${esc(p.number)}</a><button class="iconbtn sm" data-act="copy" data-v="${esc(p.number)}" aria-label="${T('העתקת המספר')}">${icon('copy')}</button></span></div>`).join('')}</div>
+          ${m.services.length ? `<h3 class="h3">${T('במקווה')}</h3><div class="chips wrap svc">${m.services.map((x) => `<span class="tag big">${icon('check')}${esc(T(x))}</span>`).join('')}</div>` : ''}
 
           ${m.notes ? `<h3 class="h3">${T('טוב לדעת')}</h3><p class="notes">${esc(m.notes)}</p>` : ''}
 
-          ${rabbi ? `<h3 class="h3">${T('רב האזור לשאלות')}</h3>${rabbiCard(rabbi)}` : ''}
-          <button class="btn ghost wide" data-act="report" data-id="${m.id}">${icon('flag')}${T('משהו לא תקין? דיווח למפקחים')}</button>
+          <div class="btnrow col">
+            <button class="btn ghost wide" data-act="tab" data-tab="rabbis">${icon('chat')}${T('שאלה לרב')}</button>
+            <button class="btn ghost wide" data-act="report" data-id="${m.id}">${icon('flag')}${T('מצאתם טעות בפרטים? כתבו לנו')}</button>
+          </div>
+          ${m.sup && window.qrcode ? `<button class="link center" data-act="qr" data-id="${m.id}">${icon('qr')}${T('קוד QR של המקווה')}</button>` : ''}
+          <p class="demo">${m.updated ? `${T('עודכן לאחרונה:')} ${esc(m.updated)} · ` : ''}${T('המידע מאתר המרכז')}</p>
         </div>
       </div>
     </div>`;
@@ -424,9 +430,14 @@
   const sheetWrap = (title, body) => `<div class="scrim" data-act="closesheet"></div>
     <div class="sheet" role="dialog" aria-label="${title}">
       <div class="sheet-head"><b>${title}</b><button class="iconbtn" data-act="closesheet" aria-label="${T('סגירה')}">${icon('x')}</button></div>${body}</div>`;
+  const cityButtons = (act, q) => {
+    const list = (q ? CITIES.filter((c) => c.name.includes(q)) : CITIES.slice().sort((a, b) => b.count - a.count)).slice(0, 30);
+    return list.map((c) => `<button data-act="${act}" data-c="${esc(c.name)}">${esc(c.name)}</button>`).join('') || `<p class="lead">${T('לא נמצא יישוב בשם הזה.')}</p>`;
+  };
   const sheetCity = (title, act) => sheetWrap(title, `
       ${act === 'setloc' ? `<button class="gps" data-act="gps">${icon('target')}<span><b>${T('המיקום הנוכחי שלי')}</b><small>${T('לפי מיקום המכשיר')}</small></span></button>` : ''}
-      <div class="citygrid">${CITIES.map((c) => `<button data-act="${act}" data-c="${esc(c.name)}">${esc(c.name)}</button>`).join('')}</div>`);
+      <label class="search">${icon('search')}<input id="cityq" data-cact="${act}" type="search" autocomplete="off" placeholder="${T('חיפוש יישוב')}"></label>
+      <div class="citygrid" id="citylist">${cityButtons(act, '')}</div>`);
   const sheetShare = (d) => sheetWrap(d.title, `
       <pre class="sharetext" id="sharetext">${esc(d.text)}</pre>
       <div class="btnrow"><a class="btn wa" href="https://wa.me/?text=${encodeURIComponent(d.text)}" target="_blank" rel="noopener">${icon('chat')}${T('וואטסאפ')}</a>
@@ -442,7 +453,7 @@
   function sheetQr(d) {
     const m = byId(d.id), q = window.qrcode(0, 'M'); q.addData(APP_URL + '#' + m.id); q.make();
     return sheetWrap(T('קוד QR של המקווה'), `<div class="qrbox">${q.createSvgTag({ cellSize: 5, margin: 2, scalable: true })}</div>
-      <p class="lead center"><b>${esc(m.name)}</b><br>${T('סריקת הקוד פותחת את דף המקווה ומאמתת שהוא בפיקוח. מיועד לשלט בכניסה.')}</p>`);
+      <p class="lead center"><b>${esc(m.full)}</b><br>${T('סריקת הקוד פותחת את דף המקווה ומאמתת שהוא בפיקוח. מיועד לשלט בכניסה.')}</p>`);
   }
 
   /* ---------- ציור ---------- */
@@ -451,7 +462,7 @@
   const unseen = () => UPDATES.length && UPDATES[0].date > S.seen;
   function shell() {
     $('#app').innerHTML = `
-      <header class="top"><button class="brand" data-act="tab" data-tab="list"><span class="logo">${icon('list')}</span><span><b>${T('מאגר המקוואות')}</b><small>${T('מקוואות בפיקוח טהרת המשפחה')}</small></span></button>
+      <header class="top"><button class="brand" data-act="tab" data-tab="list" aria-label="${T('המרכז הארצי למען טהרת המשפחה')}">${window.LOGO.full}</button>
         <span class="row"><button class="iconbtn" id="bell" data-act="tab" data-tab="updates" aria-label="${T('עדכונים')}">${icon('bell')}<i class="badge" hidden></i></button>
         <button class="iconbtn" data-act="tab" data-tab="about" aria-label="${T('אודות והגדרות')}">${icon('info')}</button></span></header>
       <main id="view" class="view"></main>
@@ -465,6 +476,7 @@
     TABS.forEach(([k]) => { const b = $('#tab-' + k); b.classList.toggle('on', k === S.tab); b.setAttribute('aria-current', k === S.tab ? 'page' : 'false'); });
     $('#bell .badge').hidden = !unseen();
     if (S.tab === 'list') renderList();
+    setTimeout(hydrate, 0);
     v.scrollTop = keepScroll ? top : 0;
     const m = S.detail && byId(S.detail);
     const ov = $('#overlay'), dTop = ov.querySelector('.detail-body') ? ov.querySelector('.detail-body').scrollTop : 0, same = ov.dataset.id === (m ? m.id : '');
@@ -489,8 +501,8 @@
   }
   function mikvehText(m) {
     const h = hoursToday(m);
-    return [m.name, `${m.address}, ${m.city}`, m.status !== 'active' ? T('כרגע בשיפוץ') + (m.statusNote ? ' · ' + m.statusNote : '') : h && h.range ? (T('היום:') + ' \u2066') + h.range + '\u2069' : '',
-      (T('טלפון:') + ' ') + m.phones[0].number, (T('ניווט:') + ' ') + mapsUrl(m), '', T('מתוך מאגר המקוואות שבפיקוח טהרת המשפחה')].filter((x, i) => x || i === 5).join('\n');
+    return [m.full, m.place, h ? (h.label ? T(h.label) + ': ' : '') + h.value : '', m.phones[0] ? `${T('טלפון:')} ${m.phones[0]}` : '',
+      `${T('ניווט:')} ${mapsUrl(m)}`, '', T('מתוך מאגר המקוואות של המרכז הארצי למען טהרת המשפחה')].filter((x, i) => x || i === 5).join('\n');
   }
   /* דף מקווה נפתח דרך הכתובת (#m01), כדי שכפתור החזרה של המכשיר וקישורי QR יעבדו */
   function openDetail(id) { S.detail = id; S.sheet = null; try { if (location.hash !== '#' + id) location.hash = id; } catch (e) { /* */ } render(true); }
@@ -510,8 +522,14 @@
     else if (a === 'open') openDetail(d.id);
     else if (a === 'close') closeDetail();
     else if (a === 'fav') { const id = d.id; S.favs.has(id) ? S.favs.delete(id) : S.favs.add(id); store.set('favs', [...S.favs]); render(true); toast(S.favs.has(id) ? T('נשמר ברשימת השמורים') : T('הוסר מהשמורים')); }
-    else if (a === 'filter') { const k = d.k; S.filters.has(k) ? S.filters.delete(k) : S.filters.add(k); b.classList.toggle('on'); b.setAttribute('aria-pressed', S.filters.has(k)); renderList(); }
-    else if (a === 'clear') { S.q = ''; S.filters.clear(); render(); }
+    else if (a === 'filter') { const k = d.k; S.filters.has(k) ? S.filters.delete(k) : S.filters.add(k); b.classList.toggle('on'); b.setAttribute('aria-pressed', S.filters.has(k)); S.limit = 30; renderList(); }
+    else if (a === 'clear') { S.q = ''; S.filters.clear(); S.limit = 30; render(); }
+    else if (a === 'more') { S.limit += 30; renderList(); }
+    else if (a === 'mapall') { S.q = d.c; S.filters.clear(); S.limit = 30; S.tab = 'list'; render(); }
+    else if (a === 'maptap') {
+      const r = b.getBoundingClientRect(), x = (e.clientX - r.left) / r.width * MAP.w, y = (e.clientY - r.top) / r.height * MAP.h;
+      S.mapCity = CITIES.reduce((best, c) => (Math.hypot(mx(c.lng) - x, my(c.lat) - y) < Math.hypot(mx(best.lng) - x, my(best.lat) - y) ? c : best)).name; render(true);
+    }
     else if (a === 'pickloc') { S.sheet = 'city'; render(true); }
     else if (a === 'tripcity' || a === 'tripfrom') { S.sheet = a; render(true); }
     else if (a === 'closesheet') { S.sheet = null; render(true); }
@@ -540,7 +558,8 @@
       });
     }
   });
-  document.addEventListener('input', (e) => { if (e.target.id === 'q') { S.q = e.target.value; renderList(); } });
+  document.addEventListener('input', (e) => { if (e.target.id === 'q') { S.q = e.target.value; S.limit = 30; renderList(); }
+    else if (e.target.id === 'cityq') $('#citylist').innerHTML = cityButtons(e.target.dataset.cact, e.target.value.trim()); });
   document.addEventListener('change', (e) => {
     const t = e.target;
     if (t.id === 'tfrom' || t.id === 'tto') {
