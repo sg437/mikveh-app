@@ -1,0 +1,12 @@
+{
+  "name": "מאגר המקוואות",
+  "short_name": "מקוואות",
+  "lang": "he",
+  "dir": "rtl",
+  "start_url": ".",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#F2F6F7",
+  "theme_color": "#0A6577",
+  "icons": [{ "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}

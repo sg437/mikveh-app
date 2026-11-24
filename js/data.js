@@ -1,0 +1,115 @@
+/*
+ * נתוני הדגמה בלבד — יוחלפו בנתוני אמת ממערכת הניהול.
+ * מבנה רשומת מקווה:
+ *   id, name, city, address, lat, lng
+ *   status: 'active' | 'renovation'   statusNote: טקסט חופשי (למשל מועד פתיחה צפוי)
+ *   chabad: בור חב"ד   chazonIsh: לשיטת חזו"א   filter: מערכת סינון
+ *   booking: { type: 'phone' | 'link' | 'none', value }
+ *   phones: [{ label, number }]   hours: [{ label, value }]
+ *   photos: [כתובות תמונה]   notes
+ */
+window.DATA = {
+  demo: true,
+
+  MIKVAOT: [
+    { id: 'm01', name: 'מקווה רמות א׳', city: 'ירושלים', address: 'רחוב הדוגמה 12, רמות', lat: 31.8145, lng: 35.1931,
+      status: 'active', chabad: true, chazonIsh: true, filter: true,
+      booking: { type: 'phone', value: '02-555-0101' },
+      phones: [{ label: 'המקווה', number: '02-555-0101' }, { label: 'אחראי/ת', number: '050-555-0101' }],
+      hours: [{ label: 'ימי חול', value: 'מצאת הכוכבים, למשך 3 שעות' }, { label: 'ליל שבת וחג', value: 'בתיאום מראש בלבד' }, { label: 'מוצאי שבת', value: 'שעה אחרי צאת השבת, למשך שעתיים' }],
+      photos: [], notes: 'חניה ברחוב. נגישות מלאה.' },
+    { id: 'm02', name: 'מקווה גבעת שאול', city: 'ירושלים', address: 'רחוב הדוגמה 4, גבעת שאול', lat: 31.7905, lng: 35.1915,
+      status: 'renovation', statusNote: 'פתיחה צפויה: ר״ח שבט', chabad: false, chazonIsh: true, filter: false,
+      booking: { type: 'none' },
+      phones: [{ label: 'המקווה', number: '02-555-0102' }],
+      hours: [{ label: 'כעת', value: 'סגור לרגל שיפוץ' }],
+      photos: [], notes: 'בתקופת השיפוץ ניתן לפנות למקווה רמות א׳.' },
+    { id: 'm03', name: 'מקווה קריית הרצוג', city: 'בני ברק', address: 'רחוב הדוגמה 30', lat: 32.0789, lng: 34.8402,
+      status: 'active', chabad: false, chazonIsh: true, filter: true,
+      booking: { type: 'link', value: 'https://example.org/booking/m03' },
+      phones: [{ label: 'המקווה', number: '03-555-0103' }],
+      hours: [{ label: 'ימי חול', value: 'מצאת הכוכבים עד 23:00' }, { label: 'ליל שבת וחג', value: 'בתיאום מראש בלבד' }],
+      photos: [], notes: '' },
+    { id: 'm04', name: 'מקווה מרכז העיר', city: 'בני ברק', address: 'רחוב הדוגמה 7', lat: 32.0868, lng: 34.8338,
+      status: 'active', chabad: true, chazonIsh: true, filter: false,
+      booking: { type: 'phone', value: '03-555-0104' },
+      phones: [{ label: 'המקווה', number: '03-555-0104' }],
+      hours: [{ label: 'ימי חול', value: 'מצאת הכוכבים, למשך 3 שעות' }],
+      photos: [], notes: '' },
+    { id: 'm05', name: 'מקווה נווה שאנן', city: 'חיפה', address: 'רחוב הדוגמה 18', lat: 32.7876, lng: 35.0152,
+      status: 'active', chabad: true, chazonIsh: false, filter: true,
+      booking: { type: 'phone', value: '04-555-0105' },
+      phones: [{ label: 'המקווה', number: '04-555-0105' }],
+      hours: [{ label: 'ימי חול', value: 'מצאת הכוכבים, למשך שעתיים וחצי' }],
+      photos: [], notes: '' },
+    { id: 'm06', name: 'מקווה העיר העתיקה', city: 'צפת', address: 'סמטת הדוגמה 3', lat: 32.9667, lng: 35.4946,
+      status: 'active', chabad: false, chazonIsh: true, filter: false,
+      booking: { type: 'phone', value: '04-555-0106' },
+      phones: [{ label: 'המקווה', number: '04-555-0106' }],
+      hours: [{ label: 'ימי חול', value: 'מצאת הכוכבים, למשך שעתיים' }, { label: 'עונת הנופש', value: 'שעות מורחבות — מומלץ לתאם' }],
+      photos: [], notes: 'גישה במדרגות.' },
+    { id: 'm07', name: 'מקווה קריית שמואל', city: 'טבריה', address: 'רחוב הדוגמה 9', lat: 32.7906, lng: 35.5252,
+      status: 'active', chabad: true, chazonIsh: true, filter: true,
+      booking: { type: 'phone', value: '04-555-0107' },
+      phones: [{ label: 'המקווה', number: '04-555-0107' }],
+      hours: [{ label: 'ימי חול', value: 'מצאת הכוכבים, למשך 3 שעות' }],
+      photos: [], notes: '' },
+    { id: 'm08', name: 'מקווה מרכזי אילת', city: 'אילת', address: 'רחוב הדוגמה 21', lat: 29.5569, lng: 34.9482,
+      status: 'active', chabad: true, chazonIsh: false, filter: true,
+      booking: { type: 'phone', value: '08-555-0108' },
+      phones: [{ label: 'המקווה', number: '08-555-0108' }],
+      hours: [{ label: 'כל השנה', value: 'בתיאום טלפוני מראש' }],
+      photos: [], notes: 'מתאים לנופשים — יש לתאם יום קודם.' },
+    { id: 'm09', name: 'מקווה רובע ז׳', city: 'אשדוד', address: 'רחוב הדוגמה 15', lat: 31.7892, lng: 34.6405,
+      status: 'active', chabad: false, chazonIsh: true, filter: true,
+      booking: { type: 'link', value: 'https://example.org/booking/m09' },
+      phones: [{ label: 'המקווה', number: '08-555-0109' }],
+      hours: [{ label: 'ימי חול', value: 'מצאת הכוכבים עד 22:30' }],
+      photos: [], notes: '' },
+    { id: 'm10', name: 'מקווה רמה ב׳', city: 'בית שמש', address: 'רחוב הדוגמה 40', lat: 31.7145, lng: 34.9942,
+      status: 'renovation', statusNote: 'פתיחה צפויה: אחרי פורים', chabad: true, chazonIsh: true, filter: true,
+      booking: { type: 'none' },
+      phones: [{ label: 'אחראי/ת', number: '050-555-0110' }],
+      hours: [{ label: 'כעת', value: 'סגור לרגל שיפוץ' }],
+      photos: [], notes: '' },
+    { id: 'm11', name: 'מקווה ערד', city: 'ערד', address: 'רחוב הדוגמה 5', lat: 31.2565, lng: 35.2118,
+      status: 'active', chabad: false, chazonIsh: true, filter: false,
+      booking: { type: 'phone', value: '08-555-0111' },
+      phones: [{ label: 'המקווה', number: '08-555-0111' }],
+      hours: [{ label: 'ימי חול', value: 'מצאת הכוכבים, למשך שעתיים' }],
+      photos: [], notes: 'הקרוב ביותר לאזור ים המלח.' },
+    { id: 'm12', name: 'מקווה קריית צאנז', city: 'נתניה', address: 'רחוב הדוגמה 2', lat: 32.3402, lng: 34.8571,
+      status: 'active', chabad: true, chazonIsh: true, filter: true,
+      booking: { type: 'phone', value: '09-555-0112' },
+      phones: [{ label: 'המקווה', number: '09-555-0112' }],
+      hours: [{ label: 'ימי חול', value: 'מצאת הכוכבים, למשך 3 שעות' }],
+      photos: [], notes: '' },
+    { id: 'm13', name: 'מקווה מירון', city: 'מירון', address: 'ליד מרכז המושב', lat: 32.9905, lng: 35.4402,
+      status: 'active', chabad: false, chazonIsh: true, filter: false,
+      booking: { type: 'phone', value: '04-555-0113' },
+      phones: [{ label: 'המקווה', number: '04-555-0113' }],
+      hours: [{ label: 'כל השנה', value: 'בתיאום טלפוני מראש' }],
+      photos: [], notes: '' },
+    { id: 'm14', name: 'מקווה מודיעין עילית', city: 'מודיעין עילית', address: 'רחוב הדוגמה 11, קריית ספר', lat: 31.9312, lng: 35.0418,
+      status: 'active', chabad: true, chazonIsh: true, filter: true,
+      booking: { type: 'link', value: 'https://example.org/booking/m14' },
+      phones: [{ label: 'המקווה', number: '08-555-0114' }],
+      hours: [{ label: 'ימי חול', value: 'מצאת הכוכבים עד 23:00' }],
+      photos: [], notes: '' }
+  ],
+
+  RABBIS: [
+    { name: 'מוקד רבני טהרת המשפחה', role: 'מענה טלפוני', hours: 'א׳–ה׳ 9:00–13:00, 20:00–22:30', phone: '02-555-0190', whatsapp: '' },
+    { name: 'הרב לדוגמה א׳', role: 'מענה בוואטסאפ ובטלפון', hours: 'א׳–ה׳ 20:00–23:00', phone: '050-555-0191', whatsapp: '972505550191' },
+    { name: 'הרב לדוגמה ב׳', role: 'מענה בוואטסאפ', hours: 'כל היום, מענה בתוך שעות ספורות', phone: '', whatsapp: '972505550192' }
+  ],
+
+  CITIES: [
+    ['ירושלים', 31.778, 35.235], ['בני ברק', 32.084, 34.834], ['תל אביב', 32.085, 34.782], ['חיפה', 32.794, 34.989],
+    ['צפת', 32.965, 35.496], ['מירון', 32.990, 35.440], ['טבריה', 32.796, 35.531], ['קריית שמונה', 33.208, 35.570],
+    ['נהריה', 33.006, 35.095], ['זכרון יעקב', 32.571, 34.952], ['נתניה', 32.321, 34.853], ['פתח תקווה', 32.087, 34.887],
+    ['אלעד', 32.052, 34.951], ['מודיעין עילית', 31.933, 35.043], ['רחובות', 31.894, 34.811], ['אשדוד', 31.804, 34.655],
+    ['בית שמש', 31.747, 34.988], ['ביתר עילית', 31.697, 35.116], ['אשקלון', 31.669, 34.571], ['נתיבות', 31.423, 34.589],
+    ['באר שבע', 31.252, 34.791], ['ערד', 31.259, 35.213], ['ים המלח (עין בוקק)', 31.200, 35.362], ['אילת', 29.558, 34.948]
+  ].map(([name, lat, lng]) => ({ name, lat, lng }))
+};
