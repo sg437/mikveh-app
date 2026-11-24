@@ -1,6 +1,7 @@
 (function () {
   'use strict';
-  const { MIKVAOT, RABBIS, CITIES, demo } = window.DATA;
+  const { MIKVAOT, RABBIS, CITIES, UPDATES, demo } = window.DATA;
+  const APP_URL = 'https://example.org/app';   // יוחלף בכתובת האמיתית של האפליקציה
   document.documentElement.lang = 'he';
   document.documentElement.dir = 'rtl';
 
@@ -16,15 +17,38 @@
     const h = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * r) * Math.cos(b.lat * r) * Math.sin(dLng / 2) ** 2;
     return 12742 * Math.asin(Math.sqrt(h));
   };
+  /* מרחק נקודה מקטע ישר (בק"מ) ומיקום יחסי לאורכו */
+  const alongRoute = (p, a, b) => {
+    const kx = 111.3 * Math.cos(((a.lat + b.lat) / 2) * Math.PI / 180), ky = 111.3;
+    const ax = a.lng * kx, ay = a.lat * ky, bx = b.lng * kx, by = b.lat * ky, px = p.lng * kx, py = p.lat * ky;
+    const len2 = (bx - ax) ** 2 + (by - ay) ** 2 || 1;
+    const t = Math.max(0, Math.min(1, ((px - ax) * (bx - ax) + (py - ay) * (by - ay)) / len2));
+    return { d: Math.hypot(px - (ax + t * (bx - ax)), py - (ay + t * (by - ay))), t };
+  };
   const fmtKm = (d) => (d < 1 ? Math.round(d * 1000) + ' מ׳' : d < 10 ? d.toFixed(1) + ' ק״מ' : Math.round(d) + ' ק״מ');
   const TZ = 'Asia/Jerusalem';
   const fTime = new Intl.DateTimeFormat('he-IL', { hour: '2-digit', minute: '2-digit', timeZone: TZ });
   const fDay = new Intl.DateTimeFormat('he-IL', { weekday: 'long', day: 'numeric', month: 'numeric' });
+  const fDate = new Intl.DateTimeFormat('he-IL', { day: 'numeric', month: 'numeric', year: 'numeric' });
   let fHeb; try { fHeb = new Intl.DateTimeFormat('he-IL-u-ca-hebrew', { day: 'numeric', month: 'long' }); } catch (e) { fHeb = null; }
   const sunsetStr = (date, p) => { const s = window.Sun.sunset(date, p.lat, p.lng); return s ? fTime.format(s) : '—'; };
   const telHref = (n) => 'tel:' + n.replace(/[^\d+]/g, '');
   const isoDate = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
   const parseDate = (s) => { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d); };
+  const byId = (id) => MIKVAOT.find((m) => m.id === id);
+  const city = (n) => CITIES.find((c) => c.name === n) || CITIES[0];
+  const regionOf = (p) => (p.lat > 32.45 ? 'צפון' : p.lat < 31.55 ? 'דרום' : p.lng > 34.95 && p.lat < 31.95 ? 'ירושלים והסביבה' : 'מרכז');
+  const mapsUrl = (m) => `https://www.google.com/maps/dir/?api=1&destination=${m.lat},${m.lng}`;
+
+  /* שעות הפתיחה להיום, מחושבות מהשקיעה במקום */
+  function hoursToday(m, now = new Date()) {
+    if (m.status !== 'active') return null;
+    const dow = now.getDay();
+    if (dow === 5) return { text: 'ליל שבת · בתיאום מראש בלבד', special: true };
+    const ss = window.Sun.sunset(now, m.lat, m.lng); if (!ss) return null;
+    const open = new Date(+ss + (m.openAfterSunset + (dow === 6 ? 50 : 0)) * 6e4), close = new Date(+open + m.openMinutes * 6e4);
+    return { open, close, range: fTime.format(open) + '–' + fTime.format(close), openNow: now >= open && now < close, later: now < open, motzash: dow === 6 };
+  }
 
   const I = {
     search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
@@ -41,44 +65,65 @@
     copy: '<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/>',
     x: '<path d="M6 6l12 12M18 6 6 18"/>',
     check: '<path d="m5 12 5 5 9-10"/>',
-    target: '<circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/>'
+    target: '<circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/>',
+    bell: '<path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4l2-2zM10 21h4"/>',
+    info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/>',
+    share: '<circle cx="6" cy="12" r="2.5"/><circle cx="17" cy="6" r="2.5"/><circle cx="17" cy="18" r="2.5"/><path d="m8.2 10.8 6.6-3.6M8.2 13.2l6.6 3.6"/>',
+    map: '<path d="m3 6 6-2 6 2 6-2v14l-6 2-6-2-6 2V6zM9 4v14M15 6v14"/>',
+    clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+    shield: '<path d="M12 3 5 6v6c0 4.5 3 7.5 7 9 4-1.5 7-4.5 7-9V6l-7-3z"/><path d="m9 12 2.2 2.2L15 10"/>',
+    qr: '<rect x="4" y="4" width="6" height="6"/><rect x="14" y="4" width="6" height="6"/><rect x="4" y="14" width="6" height="6"/><path d="M14 14h2v2h-2zM18 14h2M14 18v2M18 18h2v2"/>',
+    flag: '<path d="M6 21V4M6 5h11l-2 4 2 4H6"/>',
+    alert: '<path d="M12 4 3 20h18L12 4zM12 10v5M12 17.5v.5"/>',
+    gift: '<rect x="4" y="10" width="16" height="10" rx="1"/><path d="M3 7h18v3H3zM12 7v13M12 7c-2-4-6-3-5 0M12 7c2-4 6-3 5 0"/>'
   };
   const icon = (n, cls = '') => `<svg class="ic ${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${I[n]}</svg>`;
 
   /* ---------- מצב ---------- */
   const today = new Date();
   const S = {
-    tab: 'list',
-    q: '',
-    filters: new Set(),
+    tab: 'list', q: '', filters: new Set(),
     favs: new Set(store.get('favs', [])),
     loc: store.get('loc', null),            // { lat, lng, label, gps }
-    detail: null,
-    sheet: null,                            // 'city' | 'tripcity'
-    trip: store.get('trip', { city: 'צפת', radius: 25, from: isoDate(today), to: isoDate(new Date(+today + 3 * 864e5)) })
+    detail: null, sheet: null, sheetData: null,
+    mapCity: null, rabbiArea: null,
+    bigText: store.get('bigText', false), notify: store.get('notify', false),
+    seen: store.get('seen', ''),
+    trip: Object.assign({ mode: 'area', city: 'צפת', fromCity: 'ירושלים', radius: 25, from: isoDate(today), to: isoDate(new Date(+today + 3 * 864e5)) }, store.get('trip', {}))
   };
   const FILTERS = [
-    ['active', 'פעיל כעת', (m) => m.status === 'active'],
+    ['fav', 'שמורים', (m) => S.favs.has(m.id)],
+    ['open', 'פתוח עכשיו', (m) => (hoursToday(m) || {}).openNow],
+    ['active', 'פעיל', (m) => m.status === 'active'],
     ['chabad', 'בור חב״ד', (m) => m.chabad],
     ['chazon', 'לשיטת חזו״א', (m) => m.chazonIsh],
     ['filter', 'עם פילטר', (m) => m.filter],
+    ['access', 'נגיש', (m) => m.accessible],
     ['booking', 'הזמנת תור', (m) => m.booking && m.booking.type !== 'none'],
-    ['fav', 'שמורים', (m) => S.favs.has(m.id)]
+    ['kelim', 'מקווה כלים', (m) => m.kelim]
   ];
 
   /* ---------- רכיבים ---------- */
-  const statusPill = (m) => m.status === 'active'
-    ? '<span class="pill ok"><i></i>פעיל</span>'
-    : '<span class="pill warn"><i></i>בשיפוץ</span>';
-  const tags = (m) => [m.chabad && 'בור חב״ד', m.chazonIsh && 'חזו״א', m.filter && 'פילטר'].filter(Boolean)
+  const statusPill = (m) => {
+    if (m.status !== 'active') return '<span class="pill warn"><i></i>בשיפוץ</span>';
+    const h = hoursToday(m);
+    return h && h.openNow ? '<span class="pill ok"><i></i>פתוח עכשיו</span>' : '<span class="pill ok"><i></i>פעיל</span>';
+  };
+  const tags = (m) => [m.chabad && 'בור חב״ד', m.chazonIsh && 'חזו״א', m.filter && 'פילטר', m.accessible && 'נגיש'].filter(Boolean)
     .map((t) => `<span class="tag">${t}</span>`).join('');
+  const todayLine = (m) => {
+    if (m.status !== 'active') return m.statusNote ? `<span class="today warnc">${esc(m.statusNote)}</span>` : '';
+    const h = hoursToday(m); if (!h) return '';
+    return `<span class="today">${icon('clock')}${h.special ? h.text : `${h.motzash ? 'מוצ״ש' : 'היום'} <bdi dir="ltr">${h.range}</bdi>`}</span>`;
+  };
 
-  function card(m, origin) {
-    const d = origin ? fmtKm(km(origin, m)) : '';
+  function card(m, origin, distText) {
+    const d = distText || (origin ? fmtKm(km(origin, m)) : '');
     return `<button class="card" data-act="open" data-id="${m.id}">
       <span class="card-main">
         <span class="card-name">${esc(m.name)}</span>
         <span class="card-sub">${esc(m.city)} · ${esc(m.address)}</span>
+        ${m.alert ? `<span class="alertline">${icon('alert')}${esc(m.alert)}</span>` : todayLine(m)}
         <span class="card-tags">${statusPill(m)}${tags(m)}</span>
       </span>
       <span class="card-side">${d ? `<span class="dist">${d}</span>` : ''}${S.favs.has(m.id) ? icon('heart', 'fav-on') : ''}${icon('back', 'chev')}</span>
@@ -100,45 +145,100 @@
     $('#count').textContent = items.length === MIKVAOT.length ? `${items.length} מקוואות בפיקוח` : `${items.length} מתוך ${MIKVAOT.length} מקוואות`;
     $('#sortnote').textContent = S.loc ? 'מהקרוב לרחוק' : 'לפי עיר';
     el.innerHTML = items.length ? items.map((m) => card(m, S.loc)).join('')
-      : `<div class="empty">לא נמצאו מקוואות מתאימים.<br><button class="link" data-act="clear">ניקוי החיפוש והסינון</button></div>`;
+      : `<div class="empty">${S.filters.has('fav') && !S.favs.size ? 'עוד לא שמרתם מקוואות. לחיצה על הלב בדף המקווה שומרת אותו כאן.' : 'לא נמצאו מקוואות מתאימים.'}<br><button class="link" data-act="clear">ניקוי החיפוש והסינון</button></div>`;
   }
 
   const locBar = () => `<button class="locbar" data-act="pickloc">
       ${icon('pin')}<span class="locbar-txt">${S.loc ? `<b>${esc(S.loc.label)}</b>` : '<b>בחירת מיקום</b><small>כדי לראות את המקוואות הקרובים</small>'}</span>
       <span class="locbar-change">${S.loc ? 'שינוי' : 'בחירה'}</span></button>`;
 
+  const shabbatBanner = () => {
+    const d = today.getDay();
+    return d === 5 ? `<div class="banner">${icon('info')}<span><b>היום ערב שבת.</b> בליל שבת המקוואות פועלים בתיאום מראש בלבד — כדאי להתקשר לפני כן.</span></div>`
+      : d === 6 ? `<div class="banner">${icon('info')}<span><b>מוצאי שבת.</b> המקוואות נפתחים מאוחר מהרגיל, אחרי צאת השבת.</span></div>` : '';
+  };
+
   function viewList() {
     return `<div class="pad">
-      ${locBar()}
+      ${locBar()}${shabbatBanner()}
       <label class="search">${icon('search')}<input id="q" type="search" inputmode="search" autocomplete="off" placeholder="חיפוש לפי שם, עיר או רחוב" value="${esc(S.q)}"></label>
-      <div class="chips" role="group" aria-label="סינון">${FILTERS.map(([k, l]) => `<button class="chip${S.filters.has(k) ? ' on' : ''}" data-act="filter" data-k="${k}" aria-pressed="${S.filters.has(k)}">${l}</button>`).join('')}</div>
+      <div class="chips" role="group" aria-label="סינון">${FILTERS.map(([k, l]) => `<button class="chip${S.filters.has(k) ? ' on' : ''}" data-act="filter" data-k="${k}" aria-pressed="${S.filters.has(k)}">${k === 'fav' ? icon('heart') : ''}${l}</button>`).join('')}</div>
       <div class="listhead"><span id="count"></span><span id="sortnote"></span></div>
       <div id="list" class="list"></div>
       ${demo ? '<p class="demo">הנתונים המוצגים הם נתוני הדגמה בלבד.</p>' : ''}
     </div>`;
   }
 
+  /* ---------- מפה סכמטית ---------- */
+  const MAP = { k: 118, lng0: 34.15, lat0: 33.42, w: 190, h: 474 };
+  const mx = (lng) => (lng - MAP.lng0) * 0.853 * MAP.k, my = (lat) => (MAP.lat0 - lat) * MAP.k;
+  const OUTLINE = [[35.10, 33.09], [35.07, 32.92], [34.99, 32.83], [34.95, 32.82], [34.92, 32.60], [34.85, 32.33], [34.76, 32.07], [34.63, 31.80], [34.54, 31.67], [34.49, 31.60], [34.27, 31.22], [34.56, 30.40], [34.90, 29.50], [34.97, 29.55], [35.15, 30.20], [35.33, 30.80], [35.42, 31.15], [35.50, 31.50], [35.55, 32.00], [35.57, 32.40], [35.62, 32.68], [35.88, 32.75], [35.90, 33.20], [35.80, 33.33], [35.62, 33.26], [35.55, 33.27], [35.50, 33.09]];
+  function viewMap() {
+    const groups = {};
+    MIKVAOT.forEach((m) => { (groups[m.city] = groups[m.city] || []).push(m); });
+    const names = Object.keys(groups);
+    const sel = groups[S.mapCity] ? S.mapCity : (S.loc ? names.reduce((a, n) => (km(S.loc, city(n)) < km(S.loc, city(a)) ? n : a)) : 'ירושלים');
+    const pts = names.map((n) => { const g = groups[n]; return { n, c: g.length, x: mx(g.reduce((s, m) => s + m.lng, 0) / g.length), y: my(g.reduce((s, m) => s + m.lat, 0) / g.length) }; })
+      .sort((a, b) => (a.n === sel) - (b.n === sel));
+    return `<div class="pad">
+      <h2 class="h2">מפת המקוואות</h2>
+      <div class="mapwrap">
+        <svg class="map" viewBox="0 0 ${MAP.w} ${MAP.h}" role="group" aria-label="מפה סכמטית של הארץ">
+          <polygon class="land" points="${OUTLINE.map(([g, t]) => mx(g).toFixed(1) + ',' + my(t).toFixed(1)).join(' ')}"/>
+          <ellipse class="water" cx="${mx(35.59)}" cy="${my(32.82)}" rx="5" ry="8.5"/>
+          <ellipse class="water" cx="${mx(35.48)}" cy="${my(31.5)}" rx="4.5" ry="24"/>
+          ${S.loc ? `<circle class="me" cx="${mx(S.loc.lng)}" cy="${my(S.loc.lat)}" r="4"/>` : ''}
+          ${pts.map((p) => `<g class="dot${p.n === sel ? ' on' : ''}" data-act="mapcity" data-c="${esc(p.n)}" tabindex="0" role="button" aria-label="${esc(p.n)}, ${p.c} מקוואות">
+            <circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="${p.n === sel ? 11 : 8.5}"/><text x="${p.x.toFixed(1)}" y="${(p.y + 3.6).toFixed(1)}">${p.c}</text></g>`).join('')}
+        </svg>
+        <div class="mapside">
+          <div class="mapcity">${esc(sel)}</div>
+          <div class="mapcount">${groups[sel].length} מקוואות${S.loc ? ' · ' + fmtKm(km(S.loc, city(sel))) + ' ממך' : ''}</div>
+          ${groups[sel].map((m) => `<button class="mini" data-act="open" data-id="${m.id}"><b>${esc(m.name)}</b>${m.status === 'active' ? todayLine(m) : '<span class="today warnc">בשיפוץ</span>'}</button>`).join('')}
+          <p class="note">לחיצה על עיגול מציגה את המקוואות ביישוב. המספר הוא מספר המקוואות.</p>
+        </div>
+      </div>
+    </div>`;
+  }
+
+  /* ---------- נופש ---------- */
+  function tripResults() {
+    const t = S.trip, c = city(t.city);
+    if (t.mode === 'route') {
+      const a = city(t.fromCity);
+      return MIKVAOT.map((m) => ({ m, r: alongRoute(m, a, c) })).filter((x) => x.r.d <= t.radius).sort((x, y) => x.r.t - y.r.t)
+        .map((x) => ({ m: x.m, label: x.r.d < 1 ? 'על המסלול' : fmtKm(x.r.d) + ' מהמסלול' }));
+    }
+    return MIKVAOT.map((m) => ({ m, d: km(c, m) })).filter((x) => x.d <= t.radius).sort((x, y) => x.d - y.d).map((x) => ({ m: x.m, label: fmtKm(x.d) }));
+  }
+  function tripText() {
+    const t = S.trip, res = tripResults();
+    return [`תוכנית נופש: ${t.mode === 'route' ? t.fromCity + ' ← ' + t.city : t.city}`, `${fDay.format(parseDate(t.from))} עד ${fDay.format(parseDate(t.to))}`, '',
+      ...res.map((x) => `• ${x.m.name}, ${x.m.address}, ${x.m.city} — ${x.m.phones[0].number}${x.m.status !== 'active' ? ' (בשיפוץ)' : ''}`), '', 'מתוך מאגר המקוואות שבפיקוח טהרת המשפחה'].join('\n');
+  }
   function viewTrip() {
-    const t = S.trip, c = CITIES.find((x) => x.name === t.city) || CITIES[0];
-    const near = MIKVAOT.map((m) => ({ m, d: km(c, m) })).filter((x) => x.d <= t.radius).sort((a, b) => a.d - b.d);
-    const from = parseDate(t.from), to = parseDate(t.to);
-    const days = [];
+    const t = S.trip, c = city(t.city), res = tripResults(), route = t.mode === 'route';
+    const from = parseDate(t.from), to = parseDate(t.to), days = [];
     for (let d = new Date(from), n = 0; d <= to && n < 14; d = new Date(+d + 864e5), n++) days.push(new Date(d));
+    const sel = (label, act, name) => `<div class="field"><span class="lbl">${label}</span><button class="select" data-act="${act}">${icon('pin')}<span>${esc(name)}</span>${icon('back', 'chev down')}</button></div>`;
     return `<div class="pad">
       <h2 class="h2">תכנון נופש</h2>
-      <p class="lead">בוחרים יעד ותאריכים, ורואים מראש אילו מקוואות בפיקוח נמצאים באזור.</p>
+      <p class="lead">רואים מראש אילו מקוואות בפיקוח נמצאים ביעד או בדרך אליו.</p>
       <div class="form">
-        <div class="field"><span class="lbl">יעד</span>
-          <button class="select" data-act="tripcity">${icon('pin')}<span>${esc(c.name)}</span>${icon('back', 'chev down')}</button></div>
-        <div class="field"><span class="lbl">מרחק נסיעה מרבי</span>
+        <div class="seg two"><button class="${route ? '' : 'on'}" data-act="tripmode" data-m="area">סביב היעד</button><button class="${route ? 'on' : ''}" data-act="tripmode" data-m="route">לאורך הדרך</button></div>
+        ${route ? sel('יוצאים מ־', 'tripfrom', t.fromCity) : ''}
+        ${sel('יעד', 'tripcity', c.name)}
+        <div class="field"><span class="lbl">${route ? 'מרחק מרבי מהמסלול' : 'מרחק נסיעה מרבי'}</span>
           <div class="seg">${[10, 25, 50].map((r) => `<button class="${t.radius === r ? 'on' : ''}" data-act="radius" data-r="${r}">עד ${r} ק״מ</button>`).join('')}</div></div>
         <div class="row2">
           <label class="field"><span class="lbl">מתאריך</span><input id="tfrom" type="date" value="${esc(t.from)}"></label>
           <label class="field"><span class="lbl">עד תאריך</span><input id="tto" type="date" value="${esc(t.to)}" min="${esc(t.from)}"></label>
         </div>
       </div>
-      <div class="listhead"><span>${near.length ? `${near.length} מקוואות באזור ${esc(c.name)}` : 'אין מקווה בפיקוח בטווח שנבחר'}</span></div>
-      <div class="list">${near.map((x) => card(x.m, c)).join('') || `<div class="empty">נסו להגדיל את המרחק, או פנו לרבנים לקבלת הכוונה.<br><button class="link" data-act="tab" data-tab="rabbis">יצירת קשר עם הרבנים</button></div>`}</div>
+      <div class="listhead"><span>${res.length ? `${res.length} מקוואות ${route ? `בדרך מ${esc(t.fromCity)} ל${esc(c.name)}` : 'באזור ' + esc(c.name)}` : 'אין מקווה בפיקוח בטווח שנבחר'}</span></div>
+      <div class="list">${res.map((x) => card(x.m, null, x.label)).join('') || `<div class="empty">נסו להגדיל את המרחק, או פנו לרבנים לקבלת הכוונה.<br><button class="link" data-act="tab" data-tab="rabbis">יצירת קשר עם הרבנים</button></div>`}</div>
+      ${route ? '<p class="note">המסלול מחושב בקו ישר בין שני היישובים, בקירוב.</p>' : ''}
+      ${res.length ? `<button class="btn wide" data-act="sharetrip">${icon('share')}שיתוף התוכנית</button>` : ''}
       ${days.length ? `<h3 class="h3">שקיעה ב${esc(c.name)} בימי הנופש</h3>
       <div class="times">${days.map((d) => `<div class="trow"><span>${fDay.format(d)}</span><b>${sunsetStr(d, c)}</b></div>`).join('')}</div>` : ''}
     </div>`;
@@ -161,32 +261,66 @@
     </div>`;
   }
 
-  function viewRabbis() {
-    return `<div class="pad">
-      <h2 class="h2">רבני טהרת המשפחה</h2>
-      <p class="lead">מענה לשאלות בטלפון או בוואטסאפ. הפנייה דיסקרטית.</p>
-      <div class="list">${RABBIS.map((r) => `<div class="rabbi">
-        <div class="rabbi-name">${esc(r.name)}</div>
+  /* ---------- רבנים ---------- */
+  const AREAS = ['הכול', 'ירושלים והסביבה', 'מרכז', 'צפון', 'דרום'];
+  const rabbiCard = (r) => `<div class="rabbi">
+        <div class="rabbi-head"><div class="rabbi-name">${esc(r.name)}</div><span class="tag">${esc(r.area)}</span></div>
         <div class="rabbi-sub">${esc(r.role)} · ${esc(r.hours)}</div>
-        ${r.phone ? `<div class="numrow"><span class="num" dir="ltr">${esc(r.phone)}</span><button class="iconbtn" data-act="copy" data-v="${esc(r.phone)}" aria-label="העתקת המספר">${icon('copy')}</button></div>` : ''}
+        ${r.phone ? `<div class="numrow"><span class="num" dir="ltr">${esc(r.phone)}</span><button class="iconbtn sm" data-act="copy" data-v="${esc(r.phone)}" aria-label="העתקת המספר">${icon('copy')}</button></div>` : ''}
         <div class="btnrow">
           ${r.phone ? `<a class="btn" href="${telHref(r.phone)}">${icon('phone')}חיוג</a>` : ''}
           ${r.whatsapp ? `<a class="btn wa" href="https://wa.me/${esc(r.whatsapp)}" target="_blank" rel="noopener">${icon('chat')}וואטסאפ</a>` : ''}
-        </div></div>`).join('')}</div>
+        </div></div>`;
+  function viewRabbis() {
+    const area = S.rabbiArea || (S.loc ? regionOf(S.loc) : 'הכול');
+    const list = RABBIS.filter((r) => area === 'הכול' || r.area === area || r.area === 'ארצי');
+    return `<div class="pad">
+      <h2 class="h2">רבני טהרת המשפחה</h2>
+      <p class="lead">מענה לשאלות בטלפון או בוואטסאפ, לפי אזור. הפנייה דיסקרטית.</p>
+      <div class="chips" role="group" aria-label="אזור">${AREAS.map((a) => `<button class="chip${a === area ? ' on' : ''}" data-act="rarea" data-a="${a}">${a}</button>`).join('')}</div>
+      <div class="list">${list.map(rabbiCard).join('')}</div>
       ${demo ? '<p class="demo">שמות ומספרים להדגמה בלבד.</p>' : ''}
     </div>`;
   }
 
+  /* ---------- עדכונים ואודות ---------- */
+  function viewUpdates() {
+    return `<div class="pad">
+      <h2 class="h2">עדכונים</h2>
+      <label class="switchrow"><span><b>התראות על מקוואות שמורים</b><small>שינוי שעות, סגירה זמנית ופתיחה מחדש</small></span><input id="notify" type="checkbox" ${S.notify ? 'checked' : ''}><i></i></label>
+      ${S.notify ? '<p class="note">ההעדפה נשמרה. ההתראות עצמן יופעלו בגרסת החנות.</p>' : ''}
+      <div class="list">${UPDATES.map((u) => { const m = u.mikveh && byId(u.mikveh); return `<${m ? `button data-act="open" data-id="${m.id}"` : 'div'} class="update${m && S.favs.has(m.id) ? ' mine' : ''}">
+        <span class="update-date">${fDay.format(parseDate(u.date))}${m && S.favs.has(m.id) ? ' · מקווה שמור' : ''}</span>
+        <b>${esc(u.title)}</b><span>${esc(u.body)}</span></${m ? 'button' : 'div'}>`; }).join('')}</div>
+    </div>`;
+  }
+  function viewAbout() {
+    return `<div class="pad">
+      <h2 class="h2">אודות והגדרות</h2>
+      <label class="switchrow"><span><b>טקסט גדול</b><small>הגדלת כל הכתב באפליקציה</small></span><input id="bigtext" type="checkbox" ${S.bigText ? 'checked' : ''}><i></i></label>
+      <h3 class="h3">פרטיות</h3>
+      <div class="notes"><b>האפליקציה לא אוספת עליכם מידע.</b><br>אין הרשמה ואין חשבון. המיקום משמש רק לחישוב מרחקים וזמנים בתוך המכשיר ואינו נשלח לשום מקום. המקוואות השמורים ותוכנית הנופש נשמרים במכשיר בלבד.</div>
+      <h3 class="h3">על המאגר</h3>
+      <div class="notes">כל המקוואות המופיעים כאן נמצאים בפיקוח טהרת המשפחה. בכל דף מקווה מופיעים מועד הביקורת האחרונה ותוקף הפיקוח. המידע נשמר במכשיר וזמין גם בלי קליטה.</div>
+      <button class="btn ghost wide" data-act="tab" data-tab="rabbis">${icon('chat')}יצירת קשר</button>
+      ${demo ? '<p class="demo">גרסת הדגמה · כל הנתונים לדוגמה בלבד</p>' : ''}
+    </div>`;
+  }
+
+  /* ---------- דף מקווה ---------- */
   function viewDetail(m) {
-    const fav = S.favs.has(m.id);
-    const main = (m.phones[0] || {}).number;
+    const fav = S.favs.has(m.id), main = (m.phones[0] || {}).number, h = hoursToday(m);
     const yes = (v) => (v ? `<b class="yes">${icon('check')}יש</b>` : '<b class="no">אין</b>');
     const book = m.booking || { type: 'none' };
+    const rabbi = RABBIS.find((r) => r.area === regionOf(m));
     return `<div class="detail" role="dialog" aria-label="${esc(m.name)}">
       <div class="detail-top">
         <button class="iconbtn" data-act="close" aria-label="חזרה">${icon('back', 'flip')}</button>
         <span class="detail-top-title">פרטי המקווה</span>
-        <button class="iconbtn${fav ? ' fav-on' : ''}" data-act="fav" data-id="${m.id}" aria-label="${fav ? 'הסרה מהשמורים' : 'שמירה'}" aria-pressed="${fav}">${icon('heart')}</button>
+        <span class="row">
+          <button class="iconbtn" data-act="share" data-id="${m.id}" aria-label="שיתוף">${icon('share')}</button>
+          <button class="iconbtn${fav ? ' fav-on' : ''}" data-act="fav" data-id="${m.id}" aria-label="${fav ? 'הסרה מהשמורים' : 'שמירה'}" aria-pressed="${fav}">${icon('heart')}</button>
+        </span>
       </div>
       <div class="detail-body">
         <div class="gallery">${(m.photos.length ? m.photos.map((p) => `<img src="${esc(p)}" alt="${esc(m.name)}">`) : ['', '', '']
@@ -195,68 +329,117 @@
           <h2 class="detail-name">${esc(m.name)}</h2>
           <div class="detail-addr">${esc(m.address)}, ${esc(m.city)}${S.loc ? ` · ${fmtKm(km(S.loc, m))} ממך` : ''}</div>
           <div class="card-tags">${statusPill(m)}${m.statusNote ? `<span class="statusnote">${esc(m.statusNote)}</span>` : ''}</div>
+          ${m.alert ? `<div class="banner bad">${icon('alert')}<span>${esc(m.alert)}</span></div>` : ''}
+          ${h && !m.alert ? `<div class="todaybox${h.openNow ? ' open' : ''}">${icon('clock')}<span><small>${h.special ? 'הערב' : h.openNow ? 'פתוח עכשיו' : h.later ? 'ייפתח הערב' : 'היה פתוח היום'}</small><b>${h.special ? h.text : `<bdi dir="ltr">${h.range}</bdi>`}</b></span><span class="todaybox-sun">${icon('sun')}שקיעה ${sunsetStr(today, m)}</span></div>` : ''}
 
           <div class="actions">
             <a class="act primary" href="https://waze.com/ul?ll=${m.lat},${m.lng}&navigate=yes" target="_blank" rel="noopener">${icon('nav')}<span>Waze</span></a>
-            <a class="act" href="https://www.google.com/maps/dir/?api=1&destination=${m.lat},${m.lng}" target="_blank" rel="noopener">${icon('pin')}<span>מפות Google</span></a>
+            <a class="act" href="${mapsUrl(m)}" target="_blank" rel="noopener">${icon('pin')}<span>מפות Google</span></a>
             ${main ? `<a class="act" href="${telHref(main)}">${icon('phone')}<span>חיוג</span></a>` : ''}
+            <button class="act" data-act="share" data-id="${m.id}">${icon('share')}<span>שיתוף</span></button>
           </div>
 
           ${book.type === 'link' ? `<a class="btn wide" href="${esc(book.value)}" target="_blank" rel="noopener">${icon('cal')}הזמנת תור באתר</a>`
             : book.type === 'phone' ? `<a class="btn wide" href="${telHref(book.value)}">${icon('cal')}הזמנת תור בטלפון <span dir="ltr">${esc(book.value)}</span></a>`
             : m.status === 'active' ? '<div class="infobox">אין צורך בהזמנת תור.</div>' : ''}
+          ${m.donateUrl ? `<a class="btn sunbtn wide" href="${esc(m.donateUrl)}" target="_blank" rel="noopener">${icon('gift')}השתתפות בשיפוץ המקווה</a>` : ''}
+
+          <h3 class="h3">פיקוח</h3>
+          <div class="cert">
+            <div class="cert-head">${icon('shield')}<span><b>בפיקוח טהרת המשפחה</b><small>בתוקף עד ${fDate.format(parseDate(m.validUntil))}</small></span></div>
+            <div class="spec flat">
+              <div><span>ביקורת אחרונה</span><b>${fDate.format(parseDate(m.lastInspection))}</b></div>
+              <div><span>הרב המפקח</span><b>${esc(m.supervisor)}</b></div>
+            </div>
+            ${window.qrcode ? `<button class="link" data-act="qr" data-id="${m.id}">${icon('qr')}קוד QR של המקווה</button>` : ''}
+          </div>
 
           <h3 class="h3">פרטי המקווה</h3>
           <div class="spec">
             <div><span>בור חב״ד (בור על גבי בור)</span>${yes(m.chabad)}</div>
             <div><span>לשיטת החזון איש</span>${yes(m.chazonIsh)}</div>
             <div><span>פילטר (מערכת סינון)</span>${yes(m.filter)}</div>
+            <div><span>מקווה כלים</span>${yes(m.kelim)}</div>
+          </div>
+
+          <h3 class="h3">מידע מעשי</h3>
+          <div class="spec">
+            <div><span>נגישות</span><b class="${m.accessible ? 'yes' : ''}">${m.accessible ? icon('check') : ''}${esc(m.accessNote)}</b></div>
+            ${m.price ? `<div><span>מחיר</span><b>${m.price} ₪</b></div><div><span>תשלום</span><b>${esc(m.payment.join(', '))}</b></div>` : ''}
+            <div><span>חניה</span><b>${esc(m.parking)}</b></div>
           </div>
 
           <h3 class="h3">שעות פתיחה</h3>
-          <div class="spec">${m.hours.map((h) => `<div><span>${esc(h.label)}</span><b>${esc(h.value)}</b></div>`).join('')}
-            <div class="sunline"><span>${icon('sun')}שקיעה היום במקום</span><b>${sunsetStr(today, m)}</b></div></div>
+          <div class="spec">${m.hours.map((x) => `<div><span>${esc(x.label)}</span><b>${esc(x.value)}</b></div>`).join('')}</div>
 
           <h3 class="h3">טלפונים</h3>
           <div class="spec">${m.phones.map((p) => `<div><span>${esc(p.label)}</span><span class="numrow"><a class="num" dir="ltr" href="${telHref(p.number)}">${esc(p.number)}</a><button class="iconbtn sm" data-act="copy" data-v="${esc(p.number)}" aria-label="העתקת המספר">${icon('copy')}</button></span></div>`).join('')}</div>
 
           ${m.notes ? `<h3 class="h3">טוב לדעת</h3><p class="notes">${esc(m.notes)}</p>` : ''}
-          <button class="btn ghost wide" data-act="tab" data-tab="rabbis">${icon('chat')}שאלה לרבני טהרת המשפחה</button>
+
+          ${rabbi ? `<h3 class="h3">רב האזור לשאלות</h3>${rabbiCard(rabbi)}` : ''}
+          <button class="btn ghost wide" data-act="report" data-id="${m.id}">${icon('flag')}משהו לא תקין? דיווח למפקחים</button>
         </div>
       </div>
     </div>`;
   }
 
-  function sheetCity(title, act) {
-    return `<div class="scrim" data-act="closesheet"></div>
+  /* ---------- גיליונות ---------- */
+  const sheetWrap = (title, body) => `<div class="scrim" data-act="closesheet"></div>
     <div class="sheet" role="dialog" aria-label="${title}">
-      <div class="sheet-head"><b>${title}</b><button class="iconbtn" data-act="closesheet" aria-label="סגירה">${icon('x')}</button></div>
+      <div class="sheet-head"><b>${title}</b><button class="iconbtn" data-act="closesheet" aria-label="סגירה">${icon('x')}</button></div>${body}</div>`;
+  const sheetCity = (title, act) => sheetWrap(title, `
       ${act === 'setloc' ? `<button class="gps" data-act="gps">${icon('target')}<span><b>המיקום הנוכחי שלי</b><small>לפי ה־GPS של המכשיר</small></span></button>` : ''}
-      <div class="citygrid">${CITIES.map((c) => `<button data-act="${act}" data-c="${esc(c.name)}">${esc(c.name)}</button>`).join('')}</div>
-    </div>`;
+      <div class="citygrid">${CITIES.map((c) => `<button data-act="${act}" data-c="${esc(c.name)}">${esc(c.name)}</button>`).join('')}</div>`);
+  const sheetShare = (d) => sheetWrap(d.title, `
+      <pre class="sharetext" id="sharetext">${esc(d.text)}</pre>
+      <div class="btnrow"><a class="btn wa" href="https://wa.me/?text=${encodeURIComponent(d.text)}" target="_blank" rel="noopener">${icon('chat')}וואטסאפ</a>
+      <button class="btn" data-act="copy" data-v="${esc(d.text)}" data-msg="הטקסט הועתק">${icon('copy')}העתקה</button></div>
+      ${navigator.share ? `<button class="btn ghost wide" data-act="nativeshare">${icon('share')}אפליקציה אחרת</button>` : ''}`);
+  const REPORT_KINDS = ['ניקיון', 'תקלה במקום', 'שעות לא נכונות', 'פרט שגוי באפליקציה', 'אחר'];
+  const sheetReport = (d) => sheetWrap('דיווח למפקחים', `
+      <p class="lead">הדיווח מגיע לצוות הפיקוח בלבד ואינו מתפרסם. ${esc(byId(d.id).name)}.</p>
+      <div class="chips wrap">${REPORT_KINDS.map((k) => `<button class="chip${d.kind === k ? ' on' : ''}" data-act="rkind" data-k="${k}">${k}</button>`).join('')}</div>
+      <label class="field"><span class="lbl">מה קרה? (לא חובה)</span><textarea id="rtext" rows="3" placeholder="תיאור קצר">${esc(d.text || '')}</textarea></label>
+      <label class="field"><span class="lbl">טלפון לחזרה (לא חובה)</span><input id="rphone" type="tel" inputmode="tel" dir="ltr" value="${esc(d.phone || '')}"></label>
+      <button class="btn wide" data-act="sendreport" ${d.kind ? '' : 'disabled'}>שליחת הדיווח</button>`);
+  function sheetQr(d) {
+    const m = byId(d.id), q = window.qrcode(0, 'M'); q.addData(APP_URL + '#' + m.id); q.make();
+    return sheetWrap('קוד QR של המקווה', `<div class="qrbox">${q.createSvgTag({ cellSize: 5, margin: 2, scalable: true })}</div>
+      <p class="lead center"><b>${esc(m.name)}</b><br>סריקת הקוד פותחת את דף המקווה ומאמתת שהוא בפיקוח. מיועד לשלט בכניסה.</p>`);
   }
 
   /* ---------- ציור ---------- */
-  const TABS = [['list', 'מקוואות', 'list'], ['trip', 'נופש', 'bag'], ['times', 'שקיעה', 'sun'], ['rabbis', 'רבנים', 'chat']];
+  const TABS = [['list', 'מקוואות', 'list'], ['map', 'מפה', 'map'], ['trip', 'נופש', 'bag'], ['times', 'שקיעה', 'sun'], ['rabbis', 'רבנים', 'chat']];
+  const VIEWS = { list: viewList, map: viewMap, trip: viewTrip, times: viewTimes, rabbis: viewRabbis, updates: viewUpdates, about: viewAbout };
+  const unseen = () => UPDATES.length && UPDATES[0].date > S.seen;
   function shell() {
     $('#app').innerHTML = `
-      <header class="top"><div class="brand"><span class="logo">${icon('list')}</span><span><b>מאגר המקוואות</b><small>מקוואות בפיקוח טהרת המשפחה</small></span></div></header>
+      <header class="top"><button class="brand" data-act="tab" data-tab="list"><span class="logo">${icon('list')}</span><span><b>מאגר המקוואות</b><small>מקוואות בפיקוח טהרת המשפחה</small></span></button>
+        <span class="row"><button class="iconbtn" id="bell" data-act="tab" data-tab="updates" aria-label="עדכונים">${icon('bell')}<i class="badge" hidden></i></button>
+        <button class="iconbtn" data-act="tab" data-tab="about" aria-label="אודות והגדרות">${icon('info')}</button></span></header>
       <main id="view" class="view"></main>
       <nav class="tabs" aria-label="ניווט ראשי">${TABS.map(([k, l, ic]) => `<button data-act="tab" data-tab="${k}" id="tab-${k}">${icon(ic)}<span>${l}</span></button>`).join('')}</nav>
       <div id="overlay"></div><div id="sheet"></div><div id="toast" class="toast" role="status" hidden></div>`;
   }
   function render(keepScroll) {
     const v = $('#view'), top = v.scrollTop;
-    v.innerHTML = { list: viewList, trip: viewTrip, times: viewTimes, rabbis: viewRabbis }[S.tab]();
+    $('#app').classList.toggle('big', S.bigText);
+    v.innerHTML = VIEWS[S.tab]();
     TABS.forEach(([k]) => { const b = $('#tab-' + k); b.classList.toggle('on', k === S.tab); b.setAttribute('aria-current', k === S.tab ? 'page' : 'false'); });
+    $('#bell .badge').hidden = !unseen();
     if (S.tab === 'list') renderList();
     v.scrollTop = keepScroll ? top : 0;
-    const m = S.detail && MIKVAOT.find((x) => x.id === S.detail);
-    $('#overlay').innerHTML = m ? viewDetail(m) : '';
-    $('#sheet').innerHTML = S.sheet === 'city' ? sheetCity('איפה אתם נמצאים?', 'setloc') : S.sheet === 'tripcity' ? sheetCity('לאן נוסעים?', 'settrip') : '';
+    const m = S.detail && byId(S.detail);
+    const ov = $('#overlay'), dTop = ov.querySelector('.detail-body') ? ov.querySelector('.detail-body').scrollTop : 0, same = ov.dataset.id === (m ? m.id : '');
+    ov.innerHTML = m ? viewDetail(m) : ''; ov.dataset.id = m ? m.id : '';
+    if (m && same) { ov.querySelector('.detail').style.animation = 'none'; ov.querySelector('.detail-body').scrollTop = dTop; }
+    const sh = { city: () => sheetCity('איפה אתם נמצאים?', 'setloc'), tripcity: () => sheetCity('לאן נוסעים?', 'settrip'), tripfrom: () => sheetCity('מאיפה יוצאים?', 'settripfrom'),
+      share: () => sheetShare(S.sheetData), report: () => sheetReport(S.sheetData), qr: () => sheetQr(S.sheetData) }[S.sheet];
+    $('#sheet').innerHTML = sh ? sh() : '';
   }
   let toastT;
-  function toast(msg) { const t = $('#toast'); t.textContent = msg; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => { t.hidden = true; }, 2600); }
+  function toast(msg, ms = 2600) { const t = $('#toast'); t.textContent = msg; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => { t.hidden = true; }, ms); }
 
   function nearestCity(p) { return CITIES.reduce((a, c) => (km(p, c) < km(p, a) ? c : a)); }
   function useGps() {
@@ -268,45 +451,75 @@
       store.set('loc', S.loc); S.sheet = null; render(); toast('המיקום עודכן');
     }, () => toast('לא התקבל מיקום. בחרו עיר מהרשימה.'), { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 });
   }
+  function mikvehText(m) {
+    const h = hoursToday(m);
+    return [m.name, `${m.address}, ${m.city}`, m.status !== 'active' ? 'כרגע בשיפוץ' + (m.statusNote ? ' · ' + m.statusNote : '') : h && h.range ? 'היום: \u2066' + h.range + '\u2069' : '',
+      'טלפון: ' + m.phones[0].number, 'ניווט: ' + mapsUrl(m), '', 'מתוך מאגר המקוואות שבפיקוח טהרת המשפחה'].filter((x, i) => x || i === 5).join('\n');
+  }
+  /* דף מקווה נפתח דרך הכתובת (#m01), כדי שכפתור החזרה של המכשיר וקישורי QR יעבדו */
+  function openDetail(id) { S.detail = id; S.sheet = null; try { if (location.hash !== '#' + id) location.hash = id; } catch (e) { /* */ } render(true); }
+  function closeDetail() { S.detail = null; try { if (location.hash) history.replaceState(null, '', location.pathname + location.search); } catch (e) { /* */ } render(true); }
+  window.addEventListener('hashchange', () => { const id = location.hash.slice(1); const next = byId(id) ? id : null; if (next !== S.detail) { S.detail = next; S.sheet = null; render(true); } });
 
   /* ---------- אירועים ---------- */
+  const saveTrip = () => store.set('trip', S.trip);
   document.addEventListener('click', (e) => {
     const b = e.target.closest('[data-act]'); if (!b) return;
-    const a = b.dataset.act;
-    if (a === 'tab') { S.tab = b.dataset.tab; S.detail = null; S.sheet = null; render(); }
-    else if (a === 'open') { S.detail = b.dataset.id; render(true); }
-    else if (a === 'close') { S.detail = null; render(true); }
-    else if (a === 'fav') { const id = b.dataset.id; S.favs.has(id) ? S.favs.delete(id) : S.favs.add(id); store.set('favs', [...S.favs]); render(true); toast(S.favs.has(id) ? 'נשמר ברשימה שלך' : 'הוסר מהשמורים'); }
-    else if (a === 'filter') { const k = b.dataset.k; S.filters.has(k) ? S.filters.delete(k) : S.filters.add(k); b.classList.toggle('on'); b.setAttribute('aria-pressed', S.filters.has(k)); renderList(); }
+    const a = b.dataset.act, d = b.dataset;
+    if (a === 'tab') {
+      S.tab = d.tab; S.sheet = null;
+      if (S.tab === 'updates' && UPDATES.length) { S.seen = UPDATES[0].date; store.set('seen', S.seen); }
+      if (S.detail) closeDetail(); else render();
+    }
+    else if (a === 'open') openDetail(d.id);
+    else if (a === 'close') closeDetail();
+    else if (a === 'fav') { const id = d.id; S.favs.has(id) ? S.favs.delete(id) : S.favs.add(id); store.set('favs', [...S.favs]); render(true); toast(S.favs.has(id) ? 'נשמר ברשימת השמורים' : 'הוסר מהשמורים'); }
+    else if (a === 'filter') { const k = d.k; S.filters.has(k) ? S.filters.delete(k) : S.filters.add(k); b.classList.toggle('on'); b.setAttribute('aria-pressed', S.filters.has(k)); renderList(); }
     else if (a === 'clear') { S.q = ''; S.filters.clear(); render(); }
     else if (a === 'pickloc') { S.sheet = 'city'; render(true); }
-    else if (a === 'tripcity') { S.sheet = 'tripcity'; render(true); }
+    else if (a === 'tripcity' || a === 'tripfrom') { S.sheet = a; render(true); }
     else if (a === 'closesheet') { S.sheet = null; render(true); }
     else if (a === 'gps') useGps();
-    else if (a === 'setloc') { const c = CITIES.find((x) => x.name === b.dataset.c); S.loc = { lat: c.lat, lng: c.lng, label: c.name }; store.set('loc', S.loc); S.sheet = null; render(true); }
-    else if (a === 'settrip') { S.trip.city = b.dataset.c; store.set('trip', S.trip); S.sheet = null; render(true); }
-    else if (a === 'radius') { S.trip.radius = +b.dataset.r; store.set('trip', S.trip); render(true); }
+    else if (a === 'setloc') { const c = city(d.c); S.loc = { lat: c.lat, lng: c.lng, label: c.name }; store.set('loc', S.loc); S.sheet = null; S.mapCity = null; S.rabbiArea = null; render(true); }
+    else if (a === 'settrip') { S.trip.city = d.c; saveTrip(); S.sheet = null; render(true); }
+    else if (a === 'settripfrom') { S.trip.fromCity = d.c; saveTrip(); S.sheet = null; render(true); }
+    else if (a === 'tripmode') { S.trip.mode = d.m; saveTrip(); render(true); }
+    else if (a === 'radius') { S.trip.radius = +d.r; saveTrip(); render(true); }
+    else if (a === 'mapcity') { S.mapCity = d.c; render(true); }
+    else if (a === 'rarea') { S.rabbiArea = d.a; render(true); }
+    else if (a === 'share') { const m = byId(d.id); S.sheet = 'share'; S.sheetData = { title: 'שיתוף המקווה', text: mikvehText(m) }; render(true); }
+    else if (a === 'sharetrip') { S.sheet = 'share'; S.sheetData = { title: 'שיתוף תוכנית הנופש', text: tripText() }; render(true); }
+    else if (a === 'nativeshare') { navigator.share({ text: S.sheetData.text }).catch(() => {}); }
+    else if (a === 'qr') { S.sheet = 'qr'; S.sheetData = { id: d.id }; render(true); }
+    else if (a === 'report') { S.sheet = 'report'; S.sheetData = { id: d.id, kind: '' }; render(true); }
+    else if (a === 'rkind') { S.sheetData.kind = d.k; S.sheetData.text = $('#rtext').value; S.sheetData.phone = $('#rphone').value; render(true); }
+    else if (a === 'sendreport') { S.sheet = null; render(true); toast('בגרסת ההדגמה הדיווח אינו נשלח. בגרסה המלאה הוא יגיע ישירות לצוות הפיקוח.', 5000); }
     else if (a === 'copy') {
-      const v = b.dataset.v;
-      Promise.resolve().then(() => navigator.clipboard.writeText(v)).then(() => toast('המספר הועתק'), () => toast(v));
+      const v = d.v, msg = d.msg || 'המספר הועתק';
+      Promise.resolve().then(() => navigator.clipboard.writeText(v)).then(() => toast(msg), () => {
+        const el = $('#sharetext'); if (el) { const r = document.createRange(); r.selectNodeContents(el); const s = getSelection(); s.removeAllRanges(); s.addRange(r); toast('הטקסט סומן — אפשר להעתיק'); } else toast(v);
+      });
     }
   });
-  document.addEventListener('input', (e) => {
-    if (e.target.id === 'q') { S.q = e.target.value; renderList(); }
-  });
+  document.addEventListener('input', (e) => { if (e.target.id === 'q') { S.q = e.target.value; renderList(); } });
   document.addEventListener('change', (e) => {
-    if (e.target.id === 'tfrom' || e.target.id === 'tto') {
-      if (!e.target.value) return;
-      S.trip[e.target.id === 'tfrom' ? 'from' : 'to'] = e.target.value;
+    const t = e.target;
+    if (t.id === 'tfrom' || t.id === 'tto') {
+      if (!t.value) return;
+      S.trip[t.id === 'tfrom' ? 'from' : 'to'] = t.value;
       if (S.trip.to < S.trip.from) S.trip.to = S.trip.from;
-      store.set('trip', S.trip); render(true);
-    }
+      saveTrip(); render(true);
+    } else if (t.id === 'bigtext') { S.bigText = t.checked; store.set('bigText', S.bigText); render(true); }
+    else if (t.id === 'notify') { S.notify = t.checked; store.set('notify', S.notify); render(true); }
   });
   document.addEventListener('keydown', (e) => {
+    if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('g[data-act]')) { e.preventDefault(); e.target.dispatchEvent(new MouseEvent('click', { bubbles: true })); }
     if (e.key !== 'Escape') return;
-    if (S.sheet) { S.sheet = null; render(true); } else if (S.detail) { S.detail = null; render(true); }
+    if (S.sheet) { S.sheet = null; render(true); } else if (S.detail) closeDetail();
   });
 
-  shell(); render();
+  shell();
+  if (byId(location.hash.slice(1))) S.detail = location.hash.slice(1);
+  render();
   if ('serviceWorker' in navigator && location.protocol === 'https:' && !window.claude) navigator.serviceWorker.register('sw.js').catch(() => {});
 })();

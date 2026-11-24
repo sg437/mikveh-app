@@ -8,6 +8,7 @@ const out = `<title>מאגר המקוואות</title>
 ${r('css/styles.css')}
 </style>
 <div id="app"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
 <script>
 ${['js/data.js', 'js/sun.js', 'js/app.js'].map(r).join('\n')}
 </script>
