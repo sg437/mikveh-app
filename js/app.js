@@ -204,7 +204,7 @@
   function viewList() {
     return `<section class="hero">
       <h1>${T('מצאו מקווה קרוב')}</h1>
-      <p>${MIKVAOT.length} ${T('מקוואות')} · ${CITIES.length} ${T('יישובים')}</p>
+      <p><b>${MIKVAOT.length}</b> ${T('מקוואות')} · <b>${CITIES.length}</b> ${T('יישובים')}</p>
       <label class="search">${icon('search')}<input id="q" type="search" inputmode="search" autocomplete="off" placeholder="${T('חיפוש לפי שם, עיר או רחוב')}" value="${esc(S.q)}"></label>
       ${locBar()}
     </section>
