@@ -46,7 +46,7 @@ page = """<title>מאגר המקוואות</title>
 %s
 %s
 </script>
-""" % (r('css/styles.css'), loader, '\n'.join(r(f) for f in ['js/i18n.js', 'js/logo.js', 'js/sun.js', 'js/app.js']))
+""" % (r('css/styles.css'), loader, '\n'.join(r(f) for f in ['js/i18n.js', 'js/logo.js', 'js/sun.js', 'js/hours.js', 'js/app.js']))
 open(os.path.join(out, 'mikvaot.html'), 'w', encoding='utf8').write(page)
 open(os.path.join(out, 'data.js'), 'w', encoding='utf8').write(r('js/data.js'))
 print(len(have), 'thumbs;', {f: os.path.getsize(os.path.join(out, f)) // 1024 for f in sorted(os.listdir(out)) if f.startswith(('thumbs-', 'data.js', 'mikvaot.html'))})

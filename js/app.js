@@ -101,6 +101,8 @@
     qr: '<rect x="4" y="4" width="6" height="6"/><rect x="14" y="4" width="6" height="6"/><rect x="4" y="14" width="6" height="6"/><path d="M14 14h2v2h-2zM18 14h2M14 18v2M18 18h2v2"/>',
     flag: '<path d="M6 21V4M6 5h11l-2 4 2 4H6"/>',
     alert: '<path d="M12 4 3 20h18L12 4zM12 10v5M12 17.5v.5"/>',
+    gear: '<path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/>',
+    mail: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m4 7 8 6 8-6"/>',
     gift: '<rect x="4" y="10" width="16" height="10" rx="1"/><path d="M3 7h18v3H3zM12 7v13M12 7c-2-4-6-3-5 0M12 7c2-4 6-3 5 0"/>'
   };
   const icon = (n, cls = '') => `<svg class="ic ${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${I[n]}</svg>`;
@@ -109,7 +111,7 @@
   const today = new Date();
   /*noT-start*/
   const S = {
-    tab: 'list', q: '', filters: new Set(),
+    page: null, q: '', filters: new Set(),
     favs: new Set(store.get('favs', [])),
     loc: store.get('loc', null),            // { lat, lng, label, gps }
     detail: null, sheet: null, sheetData: null,
@@ -201,22 +203,37 @@
       : d === 6 ? `<div class="banner">${icon('info')}<span><b>${T('מוצאי שבת.')}</b> ${T('המקוואות נפתחים מאוחר מהרגיל, אחרי צאת השבת.')}</span></div>` : '';
   };
 
+  /* כרטיס שקיעה קטן (בסגנון כרטיס מזג האוויר במפות): שעת השקיעה של היום במיקום הנוכחי */
+  const sunChip = () => `<button class="sunchip" data-act="page" data-p="times" aria-label="${T('זמני השקיעה')}">
+      ${icon('sun')}<span><b>${S.loc ? sunsetStr(today, S.loc) : '—'}</b><small>${S.loc ? T('שקיעה היום') : T('שקיעה · בחרו מיקום')}</small></span></button>`;
+
+  /* מקטעי העמוד הראשי (במקום סרגל הלשוניות התחתון) */
+  const SECTIONS = [
+    ['map', 'מפה', 'map', () => T('המקוואות לפי יישוב')],
+    ['trip', 'תכנון נופש', 'bag', () => T('מקוואות ביעד ובדרך')],
+    ['times', 'זמני שקיעה', 'sun', () => (S.loc ? T('היום') + ' ' + sunsetStr(today, S.loc) : T('לפי המיקום שלך'))],
+    ['rabbis', 'שאלה לרב', 'chat', () => T('טלפון וכתב, בדיסקרטיות')],
+    ['updates', 'עדכונים', 'bell', () => (UPDATES.length ? UPDATES.length + ' ' + T('הודעות') : T('שינויי שעות וסגירות'))],
+    ['about', 'הגדרות', 'gear', () => T('שפה, טקסט גדול, פרטיות')]
+  ];
+
   function viewList() {
+    const q = S.q;
     return `<section class="hero">
-      <h1>${T('מצאו מקווה קרוב')}</h1>
+      <div class="hero-row"><h1>${T('מצאו מקווה קרוב')}</h1>${sunChip()}</div>
       <p><b>${MIKVAOT.length}</b> ${T('מקוואות')} · <b>${CITIES.length}</b> ${T('יישובים')}</p>
-      <label class="search">${icon('search')}<input id="q" type="search" inputmode="search" autocomplete="off" placeholder="${T('חיפוש לפי שם, עיר או רחוב')}" value="${esc(S.q)}"></label>
-      ${locBar()}
+      <div class="search">${icon('search')}<input id="q" type="search" inputmode="search" autocomplete="off" aria-label="${T('חיפוש מקווה')}" placeholder="${T('חיפוש לפי שם, עיר או רחוב')}" value="${esc(q)}">
+        <button class="locate" data-act="gps" aria-label="${T('מיון לפי המיקום הנוכחי שלי')}" title="${T('המיקום הנוכחי שלי')}">${icon('target')}</button></div>
+      <div class="locline">${icon('pin')}${S.loc
+        ? `<span>${T('ממוינים לפי מרחק מ־')}<b>${esc(S.loc.label)}</b></span><button class="locline-btn" data-act="pickloc">${T('שינוי מיקום')}</button>`
+        : `<span>${T('הפעילו מיקום כדי לראות קודם את הקרובים')}</span><button class="locline-btn" data-act="pickloc">${T('בחירת עיר')}</button>`}</div>
     </section>
     <div class="pad">
       ${shabbatBanner()}
-      <div class="quick">
-        <button data-act="gps"><i>${icon('target')}</i><span>${T('קרוב אליי')}</span></button>
-        <button data-act="tab" data-tab="map"><i>${icon('map')}</i><span>${T('מפה')}</span></button>
-        <button data-act="tab" data-tab="trip"><i>${icon('bag')}</i><span>${T('נופש')}</span></button>
-        <button data-act="tab" data-tab="rabbis"><i>${icon('chat')}</i><span>${T('שאלה לרב')}</span></button>
-      </div>
       <div id="nearby"></div>
+      <div class="sections" role="navigation" aria-label="${T('ניווט ראשי')}">${SECTIONS.map(([k, l, ic, sub]) => `<button data-act="page" data-p="${k}"${k === 'updates' ? ' id="sec-updates"' : ''}>
+        <i>${icon(ic)}${k === 'updates' ? '<em class="badge" hidden></em>' : ''}</i><span><b>${T(l)}</b><small>${sub()}</small></span></button>`).join('')}</div>
+      <div class="sechead">${T('כל המקוואות')}</div>
       <div class="chips" role="group" aria-label="${T('סינון')}">${FILTERS.map(([k, l]) => `<button class="chip${S.filters.has(k) ? ' on' : ''}" data-act="filter" data-k="${k}" aria-pressed="${S.filters.has(k)}">${k === 'fav' ? icon('heart') : ''}${T(l)}</button>`).join('')}</div>
       <div class="listhead"><span id="count"></span><span id="sortnote"></span></div>
       <div id="list" class="list"></div>
@@ -232,7 +249,6 @@
     const here = MIKVAOT.filter((m) => m.city === sel.name);
     const near = CITIES.filter((c) => c !== sel).map((c) => ({ c, d: km(sel, c) })).sort((a, b) => a.d - b.d).slice(0, 6);
     return `<div class="pad">
-      <h2 class="h2">${T('מפת המקוואות')}</h2>
       <div class="mapwrap">
         <svg class="map" viewBox="0 0 ${MAP.w} ${MAP.h}" data-act="maptap" role="img" aria-label="${T('מפה סכמטית של הארץ')}">
           <polygon class="land" points="${OUTLINE.map(([g, t]) => mx(g).toFixed(1) + ',' + my(t).toFixed(1)).join(' ')}"/>
@@ -276,7 +292,6 @@
     for (let d = new Date(from), n = 0; d <= to && n < 14; d = new Date(+d + 864e5), n++) days.push(new Date(d));
     const sel = (label, act, name) => `<div class="field"><span class="lbl">${label}</span><button class="select" data-act="${act}">${icon('pin')}<span>${esc(name)}</span>${icon('back', 'chev down')}</button></div>`;
     return `<div class="pad">
-      <h2 class="h2">${T('תכנון נופש')}</h2>
       <p class="lead">${T('רואים מראש אילו מקוואות נמצאים ביעד או בדרך אליו.')}</p>
       <div class="form">
         <div class="seg two"><button class="${route ? '' : 'on'}" data-act="tripmode" data-m="area">${T('סביב היעד')}</button><button class="${route ? 'on' : ''}" data-act="tripmode" data-m="route">${T('לאורך הדרך')}</button></div>
@@ -290,7 +305,7 @@
         </div>
       </div>
       <div class="listhead"><span>${res.length ? `${res.length} ${T('מקוואות')} ${route ? `${T('בדרך מ')}${esc(t.fromCity)} ${T('ל')}${esc(c.name)}` : (T('באזור') + ' ') + esc(c.name)}` : T('אין מקווה בטווח שנבחר')}</span></div>
-      <div class="list">${res.slice(0, 40).map((x) => card(x.m, null, x.label)).join('') || `<div class="empty">${T('נסו להגדיל את המרחק, או פנו לרבנים לקבלת הכוונה.')}<br><button class="link" data-act="tab" data-tab="rabbis">${T('יצירת קשר עם הרבנים')}</button></div>`}</div>
+      <div class="list">${res.slice(0, 40).map((x) => card(x.m, null, x.label)).join('') || `<div class="empty">${T('נסו להגדיל את המרחק, או פנו לרבנים לקבלת הכוונה.')}<br><button class="link" data-act="page" data-p="rabbis">${T('יצירת קשר עם הרבנים')}</button></div>`}</div>
       ${route ? ('<p class="note">' + T('המסלול מחושב בקו ישר בין שני היישובים, בקירוב.') + '</p>') : ''}
       ${res.length ? `<button class="btn wide" data-act="sharetrip">${icon('share')}${T('שיתוף התוכנית')}</button>` : ''}
       ${days.length ? `<h3 class="h3">${T('שקיעה ב')}${esc(c.name)} ${T('בימי הנופש')}</h3>
@@ -299,10 +314,9 @@
   }
 
   function viewTimes() {
-    if (!S.loc) return `<div class="pad"><h2 class="h2">${T('זמני השקיעה')}</h2>${locBar()}<div class="empty">${T('בחרו מיקום כדי לראות את זמן השקיעה המדויק למקום שבו אתם נמצאים.')}</div></div>`;
+    if (!S.loc) return `<div class="pad">${locBar()}<div class="empty">${T('בחרו מיקום כדי לראות את זמן השקיעה המדויק למקום שבו אתם נמצאים.')}</div></div>`;
     const days = Array.from({ length: 7 }, (_, i) => new Date(+today + i * 864e5));
     return `<div class="pad">
-      <h2 class="h2">${T('זמני השקיעה')}</h2>
       ${locBar()}
       <div class="sunhero">
         <span class="sunhero-lbl">${icon('sun')} ${T('שקיעה היום')}</span>
@@ -326,7 +340,6 @@
         </div></div>`;
   function viewRabbis() {
     return `<div class="pad">
-      <h2 class="h2">${T('שאלות לרב')}</h2>
       <p class="lead">${T('רבני המרכז הארצי למען טהרת המשפחה עונים לשאלות בטלפון ובכתב. הפנייה דיסקרטית.')}</p>
       <div class="list">${RABBIS.map(rabbiCard).join('')}
         <div class="rabbi">
@@ -342,7 +355,6 @@
   /* ---------- עדכונים ואודות ---------- */
   function viewUpdates() {
     return `<div class="pad">
-      <h2 class="h2">${T('עדכונים')}</h2>
       <label class="switchrow"><span><b>${T('התראות על מקוואות שמורים')}</b><small>${T('שינוי שעות, סגירה זמנית ופתיחה מחדש')}</small></span><input id="notify" type="checkbox" ${S.notify ? 'checked' : ''}><i></i></label>
       ${S.notify ? ('<p class="note">' + T('ההעדפה נשמרה. ההתראות עצמן יופעלו בגרסת החנות.') + '</p>') : ''}
       ${UPDATES.length ? '' : `<div class="empty">${T('אין כרגע עדכונים. הודעות על שינויי שעות וסגירות יופיעו כאן.')}</div>`}
@@ -353,15 +365,14 @@
   }
   function viewAbout() {
     return `<div class="pad">
-      <h2 class="h2">${T('אודות והגדרות')}</h2>
       <label class="switchrow"><span><b>${T('טקסט גדול')}</b><small>${T('הגדלת כל הכתב באפליקציה')}</small></span><input id="bigtext" type="checkbox" ${S.bigText ? 'checked' : ''}><i></i></label>
       <div class="field"><span class="lbl">${T('שפה')} · Language</span><div class="seg two"><button class="${LANG === 'he' ? 'on' : ''}" data-act="lang" data-l="he">${T('עברית')}</button><button class="${LANG === 'en' ? 'on' : ''}" data-act="lang" data-l="en">English</button></div></div>
       <h3 class="h3">${T('פרטיות')}</h3>
       <div class="notes"><b>${T('האפליקציה לא אוספת עליכם מידע.')}</b><br>${T('אין הרשמה ואין חשבון. המיקום משמש רק לחישוב מרחקים וזמנים בתוך המכשיר ואינו נשלח לשום מקום. המקוואות השמורים ותוכנית הנופש נשמרים במכשיר בלבד.')}</div>
       <h3 class="h3">${T('על המאגר')}</h3>
       <div class="notes">${T('המאגר כולל את המקוואות המופיעים באתר המרכז הארצי למען טהרת המשפחה. בכל דף מקווה מצוין אם הוא בפיקוח ועד הכשרות של המרכז. המידע נשמר במכשיר וזמין גם בלי קליטה.')}</div>
-      <button class="btn ghost wide" data-act="tab" data-tab="rabbis">${icon('chat')}${T('יצירת קשר')}</button>
-      <button class="link center" data-act="tab" data-tab="admin">${T('כניסת מנהלים')}</button>
+      <button class="btn ghost wide" data-act="page" data-p="rabbis">${icon('chat')}${T('יצירת קשר')}</button>
+      <button class="link center" data-act="page" data-p="admin">${T('כניסת מנהלים')}</button>
       ${demo ? ('<p class="demo">' + T('גרסת הדגמה · כל הנתונים לדוגמה בלבד') + '</p>') : ''}
     </div>`;
   }
@@ -371,7 +382,6 @@
   function viewAdmin() {
     const m = byId(S.adminId) || MIKVAOT[0];
     return `<div class="pad">
-      <h2 class="h2">${T('אזור מנהלים')}</h2>
       <div class="banner">${icon('info')}<span>${T('הדגמה בלבד: העדכון חל במכשיר הזה ונעלם ברענון. בגרסה המלאה כל אחראי ייכנס בקוד אישי, והעדכון יופיע מיד אצל כולם.')}</span></div>
       <div class="form">
         <label class="field"><span class="lbl">${T('מקווה')}</span><select id="adm-m">${MIKVAOT.map((x) => `<option value="${x.id}" ${x.id === m.id ? 'selected' : ''}>${esc(x.name)} · ${esc(x.city)}</option>`).join('')}</select></label>
@@ -386,8 +396,35 @@
   }
 
   /* ---------- דף מקווה ---------- */
+  /* וואטסאפ: רק למספר נייד ישראלי (05X) של איש הקשר, או לשדה whatsapp מפורש בנתונים */
+  const waNumber = (n) => { const d = String(n || '').replace(/\D/g, ''); return /^05\d{8}$/.test(d) ? '972' + d.slice(1) : /^9725\d{8}$/.test(d) ? d : ''; };
+  const waOf = (m) => waNumber(m.whatsapp) || waNumber(m.contact && m.contact.whatsapp) || waNumber(m.contact && m.contact.phone);
+  const mailOf = (m) => (m.email || (m.contact && m.contact.email) || '').trim();
+  const fMin = (n) => (n < 60 ? `${n} ${T('דק׳')}` : `${Math.floor(n / 60)} ${T('ש׳')}` + (n % 60 ? ` ${n % 60} ${T('דק׳')}` : ''));
+  /* כמה זמן נשאר עד הסגירה (לפי שורת השעות של היום) וזמן נסיעה משוער */
+  function closingInfo(m, now = new Date()) {
+    const h = hoursToday(m); if (!h || !window.Hours) return null;
+    const weekday = !h.label || h.label === 'חורף' || h.label === 'קיץ';   /*noT*/
+    const r = window.Hours.parse(h.value, now, (d) => (m.lat == null ? null : window.Sun.sunset(d, m.lat, m.lng)));
+    if (!r) return null;
+    if (r.closed) return { cls: 'bad', text: T('סגור היום') };
+    if (!weekday && !r.close) return null;
+    const left = r.close ? Math.round((r.close - now) / 6e4) : null;
+    if (r.close && left <= 0) return { cls: 'bad', text: `${T('נסגר היום ב־')}${fTime.format(r.close)}`, left };
+    if (r.open && now < r.open) return { cls: 'wait', text: `${T('נפתח היום ב־')}${fTime.format(r.open)}${r.close ? ` · ${T('עד')} ${fTime.format(r.close)}` : ''}`, left };
+    if (r.close) return { cls: left <= 45 ? 'warn' : 'ok', text: `${T('נסגר בעוד')} ${fMin(left)} (${fTime.format(r.close)})`, left };
+    return null;
+  }
+  function etaInfo(m) {
+    if (!S.loc || m.lat == null || !window.Hours) return null;
+    const min = window.Hours.driveMinutes(km(S.loc, m));
+    return min == null || min > 300 ? null : min;
+  }
+  const mikvehUpdates = (m) => UPDATES.filter((u) => u.mikveh === m.id);
+
   function viewDetail(m) {
-    const fav = S.favs.has(m.id), main = m.phones[0], h = hoursToday(m);
+    const fav = S.favs.has(m.id), main = m.phones[0], h = hoursToday(m), ci = closingInfo(m), eta = etaInfo(m), wa = waOf(m), mail = mailOf(m), ups = mikvehUpdates(m);
+    const waText = encodeURIComponent(`${T('שלום, פנייה בנוגע ל')}${m.full} (${T('דרך אפליקציית המקוואות')})`);
     const photo = (f) => `${SITE}/cache/w_640,h_427,mode_crop/${encodeURIComponent(f)}`;
     return `<div class="detail" role="dialog" aria-label="${esc(m.full)}">
       <div class="detail-body">
@@ -417,26 +454,34 @@
             <button class="act${fav ? ' fav-on' : ''}" data-act="fav" data-id="${m.id}">${icon('heart')}<span>${fav ? T('שמור') : T('שמירה')}</span></button>
           </div>
 
+          ${ups.length ? `<h3 class="h3">${T('עדכונים מהמקווה')}</h3>
+          <div class="list">${ups.map((u) => `<div class="update mine"><span class="update-date">${fDay.format(parseDate(u.date))}</span><b>${esc(u.title)}</b><span>${esc(u.body)}</span></div>`).join('')}</div>` : ''}
+
           ${m.hours.length ? `<h3 class="h3">${T('שעות פתיחה')}</h3>
-          <div class="spec hours">${m.hours.map((x) => `<div class="${h && x.label === h.label && x.value === h.value ? 'now' : ''}">${x.label ? `<span>${esc(T(x.label))}</span>` : ''}<b>${esc(x.value)}</b></div>`).join('')}
+          <div class="spec hours">${ci ? `<div class="closing ${ci.cls}">${icon('clock')}<b>${ci.text}</b></div>` : ''}${m.hours.map((x) => `<div class="${h && x.label === h.label && x.value === h.value ? 'now' : ''}">${x.label ? `<span>${esc(T(x.label))}</span>` : ''}<b>${esc(x.value)}</b></div>`).join('')}
             ${m.lat != null ? `<div class="sunline"><span>${icon('sun')}${T('שקיעה היום במקום')}</span><b>${sunsetStr(today, m)}</b></div>` : ''}</div>` : ''}
 
           ${m.phones.length || m.contact ? `<h3 class="h3">${T('טלפונים')}</h3>
           <div class="spec">${m.phones.map((n) => `<div><span>${T('המקווה')}</span><span class="numrow"><a class="num" dir="ltr" href="${telHref(n)}">${esc(n)}</a><button class="iconbtn sm" data-act="copy" data-v="${esc(n)}" aria-label="${T('העתקת המספר')}">${icon('copy')}</button></span></div>`).join('')}
             ${m.contact ? `<div><span>${T('איש קשר')}${m.contact.name ? ' · ' + esc(m.contact.name) : ''}</span>${m.contact.phone ? `<span class="numrow"><a class="num" dir="ltr" href="${telHref(m.contact.phone)}">${esc(m.contact.phone)}</a><button class="iconbtn sm" data-act="copy" data-v="${esc(m.contact.phone)}" aria-label="${T('העתקת המספר')}">${icon('copy')}</button></span>` : ''}</div>` : ''}</div>` : ''}
+          ${wa || mail ? `<div class="btnrow contactbtns">
+            ${wa ? `<a class="btn wa" href="https://wa.me/${wa}?text=${waText}" target="_blank" rel="noopener">${icon('chat')}${T('וואטסאפ ל')}${m.contact && m.contact.name && waNumber(m.contact.phone) === wa ? esc(m.contact.name) : T('מקווה')}</a>` : ''}
+            ${mail ? `<a class="btn ghost" href="mailto:${esc(mail)}?subject=${encodeURIComponent(m.full)}">${icon('mail')}${T('מייל')}</a>` : ''}
+          </div>` : ''}
 
           ${m.services.length ? `<h3 class="h3">${T('במקווה')}</h3><div class="chips wrap svc">${m.services.map((x) => `<span class="tag big">${icon('check')}${esc(T(x))}</span>`).join('')}</div>` : ''}
 
           ${m.notes ? `<h3 class="h3">${T('טוב לדעת')}</h3><p class="notes">${esc(m.notes)}</p>` : ''}
 
           <div class="btnrow col">
-            <button class="btn ghost wide" data-act="tab" data-tab="rabbis">${icon('chat')}${T('שאלה לרב')}</button>
+            <button class="btn ghost wide" data-act="page" data-p="rabbis">${icon('chat')}${T('שאלה לרב')}</button>
             <button class="btn ghost wide" data-act="report" data-id="${m.id}">${icon('flag')}${T('מצאתם טעות בפרטים? כתבו לנו')}</button>
           </div>
           ${m.sup && window.qrcode ? `<button class="link center" data-act="qr" data-id="${m.id}">${icon('qr')}${T('קוד QR של המקווה')}</button>` : ''}
           <p class="demo">${m.updated ? `${T('עודכן לאחרונה:')} ${esc(m.updated)} · ` : ''}${T('המידע מאתר המרכז')}</p>
         </div>
       </div>
+      ${ci || eta ? `<div class="dstatus">${ci ? `<span class="closing ${ci.cls}">${icon('clock')}${ci.text}</span>` : ''}${eta ? `<span class="eta">${icon('nav')}≈ ${fMin(eta)} ${T('נסיעה')}${ci && ci.left != null && ci.left > 0 && eta > ci.left ? ` · <b>${T('ייתכן שלא תספיקו')}</b>` : ''}</span>` : ''}</div>` : ''}
       <div class="dbar">
         <a class="btn" href="${wazeUrl(m)}" target="_blank" rel="noopener">${icon('nav')}${T('ניווט')}</a>
         ${main ? `<a class="btn alt" href="${telHref(main)}">${icon('phone')}${T('חיוג')}</a>` : ''}
@@ -475,27 +520,32 @@
   }
 
   /* ---------- ציור ---------- */
-  /*noT*/ const TABS = [['list', 'מקוואות', 'list'], ['map', 'מפה', 'map'], ['trip', 'נופש', 'bag'], ['times', 'שקיעה', 'sun'], ['rabbis', 'רבנים', 'chat']];
-  const VIEWS = { list: viewList, map: viewMap, trip: viewTrip, times: viewTimes, rabbis: viewRabbis, updates: viewUpdates, about: viewAbout, admin: viewAdmin };
+  /* דפי משנה: נפתחים מעל העמוד הראשי עם כפתור חזרה (וגם דרך הכתובת, #p-map), במקום לשוניות */
+  /*noT*/ const PAGES = { map: [viewMap, 'מפת המקוואות'], trip: [viewTrip, 'תכנון נופש'], times: [viewTimes, 'זמני השקיעה'], rabbis: [viewRabbis, 'שאלות לרב'], updates: [viewUpdates, 'עדכונים'], about: [viewAbout, 'אודות והגדרות'], admin: [viewAdmin, 'אזור מנהלים'] };
   const unseen = () => UPDATES.length && UPDATES[0].date > S.seen;
   function shell() {
     $('#app').innerHTML = `
-      <header class="top"><button class="brand" data-act="tab" data-tab="list" aria-label="${T('המרכז הארצי למען טהרת המשפחה')}">${window.LOGO.full}</button>
-        <span class="row"><button class="iconbtn" id="bell" data-act="tab" data-tab="updates" aria-label="${T('עדכונים')}">${icon('bell')}<i class="badge" hidden></i></button>
-        <button class="iconbtn" data-act="tab" data-tab="about" aria-label="${T('אודות והגדרות')}">${icon('info')}</button></span></header>
+      <header class="top"><button class="brand" data-act="home" aria-label="${T('המרכז הארצי למען טהרת המשפחה')}">${window.LOGO.full}</button>
+        <span class="row"><button class="iconbtn" id="bell" data-act="page" data-p="updates" aria-label="${T('עדכונים')}">${icon('bell')}<i class="badge" hidden></i></button>
+        <button class="iconbtn" data-act="page" data-p="about" aria-label="${T('אודות והגדרות')}">${icon('gear')}</button></span></header>
       <main id="view" class="view"></main>
-      <nav class="tabs" aria-label="${T('ניווט ראשי')}">${TABS.map(([k, l, ic]) => `<button data-act="tab" data-tab="${k}" id="tab-${k}">${icon(ic)}<span>${T(l)}</span></button>`).join('')}</nav>
-      <div id="overlay"></div><div id="sheet"></div><div id="toast" class="toast" role="status" hidden></div>`;
+      <div id="page"></div><div id="overlay"></div><div id="sheet"></div><div id="toast" class="toast" role="status" hidden></div>`;
   }
   function render(keepScroll) {
     const v = $('#view'), top = v.scrollTop;
     $('#app').classList.toggle('big', S.bigText);
-    v.innerHTML = VIEWS[S.tab]();
-    TABS.forEach(([k]) => { const b = $('#tab-' + k); b.classList.toggle('on', k === S.tab); b.setAttribute('aria-current', k === S.tab ? 'page' : 'false'); });
-    $('#bell .badge').hidden = !unseen();
-    if (S.tab === 'list') renderList();
+    v.innerHTML = viewList();
+    document.querySelectorAll('#bell .badge, #sec-updates .badge').forEach((b) => { b.hidden = !unseen(); });
+    renderList();
     setTimeout(hydrate, 0);
-    v.scrollTop = keepScroll ? top : 0;
+    v.scrollTop = top;
+    const pg = S.page && PAGES[S.page], pl = $('#page'), pSame = pl.dataset.p === (pg ? S.page : '');
+    const pTop = pl.querySelector('.page-body') ? pl.querySelector('.page-body').scrollTop : 0;
+    pl.innerHTML = pg ? `<div class="page" role="dialog" aria-label="${T(pg[1])}">
+        <div class="ptop"><button class="iconbtn" data-act="closepage" aria-label="${T('חזרה')}">${icon('back', 'flip')}</button><b>${T(pg[1])}</b></div>
+        <div class="page-body">${pg[0]()}</div></div>` : '';
+    pl.dataset.p = pg ? S.page : '';
+    if (pg && pSame) { pl.querySelector('.page').style.animation = 'none'; pl.querySelector('.page-body').scrollTop = keepScroll ? pTop : 0; }
     const m = S.detail && byId(S.detail);
     const ov = $('#overlay'), dTop = ov.querySelector('.detail-body') ? ov.querySelector('.detail-body').scrollTop : 0, same = ov.dataset.id === (m ? m.id : '');
     ov.innerHTML = m ? viewDetail(m) : ''; ov.dataset.id = m ? m.id : '';
@@ -508,42 +558,65 @@
   function toast(msg, ms = 2600) { const t = $('#toast'); t.textContent = msg; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => { t.hidden = true; }, ms); }
 
   function nearestCity(p) { return CITIES.reduce((a, c) => (km(p, c) < km(p, a) ? c : a)); }
-  function useGps() {
-    if (!navigator.geolocation) return toast(T('המכשיר לא מאפשר איתור מיקום. בחרו עיר מהרשימה.'));
-    toast(T('מאתר מיקום…'));
-    navigator.geolocation.getCurrentPosition((pos) => {
-      const p = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-      S.loc = { ...p, label: (T('המיקום שלי · ליד') + ' ') + nearestCity(p).name, gps: true };
-      store.set('loc', S.loc); S.sheet = null; render(); toast(T('המיקום עודכן'));
-    }, () => toast(T('לא התקבל מיקום. בחרו עיר מהרשימה.')), { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 });
+  /* silent: בקשה אוטומטית בפתיחת האפליקציה — בלי הודעות שגיאה; אם אין הרשאה נשארת בחירת עיר ידנית */
+  function useGps(silent) {
+    if (!navigator.geolocation) { if (!silent) toast(T('המכשיר לא מאפשר איתור מיקום. בחרו עיר מהרשימה.')); return; }
+    if (!silent) toast(T('מאתר מיקום…'));
+    try {
+      navigator.geolocation.getCurrentPosition((pos) => {
+        const p = { lat: pos.coords.latitude, lng: pos.coords.longitude }, prev = S.loc;
+        S.loc = { ...p, label: (T('המיקום שלי · ליד') + ' ') + nearestCity(p).name, gps: true };
+        store.set('loc', S.loc);
+        const typing = document.activeElement && document.activeElement.id === 'q';
+        if (!silent || (!typing && (!prev || km(prev, p) > 0.2))) { if (!silent) S.sheet = null; render(true); }
+        if (!silent) toast(T('המיקום עודכן'));
+      }, () => { if (!silent) toast(T('לא התקבל מיקום. בחרו עיר מהרשימה.')); }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 });
+    } catch (e) { if (!silent) toast(T('לא התקבל מיקום. בחרו עיר מהרשימה.')); }
   }
   function mikvehText(m) {
     const h = hoursToday(m);
     return [m.full, m.place, h ? (h.label ? T(h.label) + ': ' : '') + h.value : '', m.phones[0] ? `${T('טלפון:')} ${m.phones[0]}` : '',
       `${T('ניווט:')} ${mapsUrl(m)}`, '', T('מתוך מאגר המקוואות של המרכז הארצי למען טהרת המשפחה')].filter((x, i) => x || i === 5).join('\n');
   }
-  /* דף מקווה נפתח דרך הכתובת (#m01), כדי שכפתור החזרה של המכשיר וקישורי QR יעבדו */
-  function openDetail(id) { S.detail = id; S.sheet = null; try { if (location.hash !== '#' + id) location.hash = id; } catch (e) { /* */ } render(true); }
-  function closeDetail() { S.detail = null; try { if (location.hash) history.replaceState(null, '', location.pathname + location.search); } catch (e) { /* */ } render(true); }
-  window.addEventListener('hashchange', () => { const id = location.hash.slice(1); const next = byId(id) ? id : null; if (next !== S.detail) { S.detail = next; S.sheet = null; render(true); } });
+  /* דפי משנה ודף מקווה נפתחים דרך הכתובת (#p-map, #m01), כדי שכפתור החזרה של המכשיר וקישורי QR יעבדו */
+  const hashPage = (h) => (h.indexOf('p-') === 0 && PAGES[h.slice(2)] ? h.slice(2) : null);
+  function setHash(h, replace) {
+    try {
+      if (replace) history.replaceState(null, '', location.pathname + location.search + (h ? '#' + h : ''));
+      else if (location.hash !== '#' + h) location.hash = h;
+    } catch (e) { /* */ }
+  }
+  function openPage(p) {
+    if (!PAGES[p]) return;
+    S.page = p; S.detail = null; S.sheet = null;
+    if (p === 'updates' && UPDATES.length) { S.seen = UPDATES[0].date; store.set('seen', S.seen); }
+    setHash('p-' + p); render(true);
+  }
+  function closePage() { S.page = null; S.sheet = null; setHash('', true); render(true); }
+  function openDetail(id) { S.detail = id; S.sheet = null; setHash(id); render(true); }
+  function closeDetail() { S.detail = null; setHash(S.page ? 'p-' + S.page : '', true); render(true); }
+  window.addEventListener('hashchange', () => {
+    const h = location.hash.slice(1); let ch = false;
+    if (byId(h)) { if (S.detail !== h) { S.detail = h; ch = true; } }
+    else { const p = hashPage(h); if (S.page !== p || S.detail) { S.page = p; S.detail = null; ch = true; } }
+    if (ch) { S.sheet = null; render(true); }
+  });
 
   /* ---------- אירועים ---------- */
   const saveTrip = () => store.set('trip', S.trip);
   document.addEventListener('click', (e) => {
     const b = e.target.closest('[data-act]'); if (!b) return;
     const a = b.dataset.act, d = b.dataset;
-    if (a === 'tab') {
-      S.tab = d.tab; S.sheet = null;
-      if (S.tab === 'updates' && UPDATES.length) { S.seen = UPDATES[0].date; store.set('seen', S.seen); }
-      if (S.detail) closeDetail(); else render();
-    }
+    if (a === 'page') openPage(d.p);
+    else if (a === 'closepage') closePage();
+    else if (a === 'home') { const had = S.page || S.detail; S.page = null; S.detail = null; S.sheet = null; setHash('', true); if (had) render(); else $('#view').scrollTo({ top: 0, behavior: 'smooth' }); }
     else if (a === 'open') openDetail(d.id);
     else if (a === 'close') closeDetail();
     else if (a === 'fav') { const id = d.id; S.favs.has(id) ? S.favs.delete(id) : S.favs.add(id); store.set('favs', [...S.favs]); render(true); toast(S.favs.has(id) ? T('נשמר ברשימת השמורים') : T('הוסר מהשמורים')); }
     else if (a === 'filter') { const k = d.k; S.filters.has(k) ? S.filters.delete(k) : S.filters.add(k); b.classList.toggle('on'); b.setAttribute('aria-pressed', S.filters.has(k)); S.limit = 30; renderList(); }
     else if (a === 'clear') { S.q = ''; S.filters.clear(); S.limit = 30; render(); }
     else if (a === 'more') { S.limit += 30; renderList(); }
-    else if (a === 'mapall') { S.q = d.c; S.filters.clear(); S.limit = 30; S.tab = 'list'; render(); }
+    else if (a === 'mapall') { S.q = d.c; S.filters.clear(); S.limit = 30; S.page = null; setHash('', true); render(); }
     else if (a === 'maptap') {
       const r = b.getBoundingClientRect(), x = (e.clientX - r.left) / r.width * MAP.w, y = (e.clientY - r.top) / r.height * MAP.h;
       S.mapCity = CITIES.reduce((best, c) => (Math.hypot(mx(c.lng) - x, my(c.lat) - y) < Math.hypot(mx(best.lng) - x, my(best.lat) - y) ? c : best)).name; render(true);
@@ -551,7 +624,7 @@
     else if (a === 'pickloc') { S.sheet = 'city'; render(true); }
     else if (a === 'tripcity' || a === 'tripfrom') { S.sheet = a; render(true); }
     else if (a === 'closesheet') { S.sheet = null; render(true); }
-    else if (a === 'gps') useGps();
+    else if (a === 'gps') useGps(false);
     else if (a === 'setloc') { const c = city(d.c); S.loc = { lat: c.lat, lng: c.lng, label: c.name }; store.set('loc', S.loc); S.sheet = null; S.mapCity = null; S.rabbiArea = null; render(true); }
     else if (a === 'settrip') { S.trip.city = d.c; saveTrip(); S.sheet = null; render(true); }
     else if (a === 'settripfrom') { S.trip.fromCity = d.c; saveTrip(); S.sheet = null; render(true); }
@@ -592,11 +665,13 @@
   document.addEventListener('keydown', (e) => {
     if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('g[data-act]')) { e.preventDefault(); e.target.dispatchEvent(new MouseEvent('click', { bubbles: true })); }
     if (e.key !== 'Escape') return;
-    if (S.sheet) { S.sheet = null; render(true); } else if (S.detail) closeDetail();
+    if (S.sheet) { S.sheet = null; render(true); } else if (S.detail) closeDetail(); else if (S.page) closePage();
   });
 
   shell();
-  if (byId(location.hash.slice(1))) S.detail = location.hash.slice(1);
+  { const h = location.hash.slice(1); if (byId(h)) S.detail = h; else S.page = hashPage(h); }
   render();
+  /* מיקום אוטומטי בכניסה (אחרי אישור ההרשאה במכשיר): גם רענון שקט של מיקום GPS קודם. מיקום שנבחר ידנית נשמר כמו שהוא */
+  if (!S.loc || S.loc.gps) useGps(true);
   if ('serviceWorker' in navigator && location.protocol === 'https:' && !window.claude) navigator.serviceWorker.register('sw.js').catch(() => {});
 })();

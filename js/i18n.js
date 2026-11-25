@@ -1,6 +1,16 @@
 /* תרגומי הממשק. המפתח הוא הטקסט בעברית; טקסט שאין לו תרגום מוצג בעברית. */
 window.I18N = {
   en: {
+    'שקיעה היום': 'Sunset today', 'שקיעה · בחרו מיקום': 'Sunset · set location', 'זמני השקיעה': 'Sunset times', 'זמני שקיעה': 'Sunset times',
+    'המקוואות לפי יישוב': 'Mikvaot by town', 'תכנון נופש': 'Trip planner', 'מקוואות ביעד ובדרך': 'At your destination and on the way',
+    'לפי המיקום שלך': 'For your location', 'טלפון וכתב, בדיסקרטיות': 'Phone or in writing, discreetly', 'הודעות': 'notices',
+    'שינויי שעות וסגירות': 'Hour changes and closures', 'הגדרות': 'Settings', 'שפה, טקסט גדול, פרטיות': 'Language, large text, privacy',
+    'חיפוש מקווה': 'Search mikvaot', 'מיון לפי המיקום הנוכחי שלי': 'Sort by my current location', 'ממוינים לפי מרחק מ־': 'Sorted by distance from ',
+    'שינוי מיקום': 'Change location', 'הפעילו מיקום כדי לראות קודם את הקרובים': 'Turn on location to see the nearest first', 'בחירת עיר': 'Choose a town',
+    'כל המקוואות': 'All mikvaot', 'מפת המקוואות': 'Mikvaot map', 'שאלות לרב': 'Questions for a rabbi', 'אודות והגדרות': 'About & settings', 'אזור מנהלים': 'Admin area',
+    'סגור היום': 'Closed today', 'נסגר היום ב־': 'Closed today at ', 'נפתח היום ב־': 'Opens today at ', 'נסגר בעוד': 'Closes in', 'עד': 'until',
+    'דק׳': 'min', 'ש׳': 'h', 'נסיעה': 'drive', 'ייתכן שלא תספיקו': 'you may not make it', 'עדכונים מהמקווה': 'Updates from this mikveh',
+    'שלום, פנייה בנוגע ל': 'Hello, regarding ', 'דרך אפליקציית המקוואות': 'via the mikvaot app', 'וואטסאפ ל': 'WhatsApp ', 'מקווה': 'the mikveh', 'מייל': 'Email',
     'מ׳': 'm', 'ק״מ': 'km', 'ליל שבת · בתיאום מראש בלבד': 'Friday night · by prior arrangement only',
     'בשיפוץ': 'Under renovation', 'בשיפוץ)': 'under renovation)', 'פתוח עכשיו': 'Open now', 'פעיל': 'Active',
     'בור חב״ד': 'Chabad bor', 'חזו״א': 'Chazon Ish', 'פילטר': 'Filter', 'נגיש': 'Accessible', 'מוצ״ש': 'Sat. night', 'היום': 'Today',
