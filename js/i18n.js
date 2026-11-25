@@ -1,6 +1,9 @@
 /* תרגומי הממשק. המפתח הוא הטקסט בעברית; טקסט שאין לו תרגום מוצג בעברית. */
 window.I18N = {
   en: {
+    'השמורים שלי': 'My saved', 'המקווה שלי': 'My mikveh', 'שמורים נוספים': 'Other saved', 'הגדרה כמקווה שלי': 'Set as my mikveh', 'נקבע כמקווה שלי': 'Set as my mikveh',
+    'כל הפרטים': 'Full details', 'נסיעה משוערת': 'Estimated drive', 'עוד': 'More', 'רשימה': 'List', 'תצוגה': 'View', 'מקוואות לפי יישוב': 'Mikvaot by town',
+    'עוד לא שמרתם מקוואות. בדף המקווה לוחצים על הלב — והמקווה יופיע כאן, עם השעות של היום, הזמן עד הסגירה וחיוג או ניווט בלחיצה.': 'No saved mikvaot yet. Tap the heart on a mikveh page and it will appear here, with today\'s hours, time until closing, and one-tap call or navigation.',
     'שקיעה היום': 'Sunset today', 'שקיעה · בחרו מיקום': 'Sunset · set location', 'זמני השקיעה': 'Sunset times', 'זמני שקיעה': 'Sunset times',
     'המקוואות לפי יישוב': 'Mikvaot by town', 'תכנון נופש': 'Trip planner', 'מקוואות ביעד ובדרך': 'At your destination and on the way',
     'לפי המיקום שלך': 'For your location', 'טלפון וכתב, בדיסקרטיות': 'Phone or in writing, discreetly', 'הודעות': 'notices',
