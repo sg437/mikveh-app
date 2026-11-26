@@ -1,6 +1,6 @@
 /* מטמון בסיסי כדי שהאפליקציה תיפתח גם בלי קליטה */
-const CACHE = 'mikvaot-v9';
-const FILES = ['./', 'index.html', 'css/styles.css', 'js/i18n.js', 'js/logo.js', 'js/data.js', 'js/sun.js', 'js/hours.js', 'js/vendor/qrcode.js', 'js/app.js', 'icons/icon.svg', 'manifest.webmanifest'];
+const CACHE = 'mikvaot-v10';
+const FILES = ['./', 'index.html', 'css/styles.css', 'js/i18n.js', 'js/logo.js', 'js/data.js', 'js/sun.js', 'js/hours.js', 'js/vault.js', 'js/vendor/qrcode.js', 'js/app.js', 'icons/icon.svg', 'manifest.webmanifest'];
 self.addEventListener('install', (e) => e.waitUntil(caches.open(CACHE).then((c) => c.addAll(FILES)).then(() => self.skipWaiting())));
 self.addEventListener('activate', (e) => e.waitUntil(caches.keys().then((ks) => Promise.all(ks.filter((k) => k !== CACHE).map((k) => caches.delete(k)))).then(() => self.clients.claim())));
 self.addEventListener('fetch', (e) => {

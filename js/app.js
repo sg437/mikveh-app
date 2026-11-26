@@ -103,6 +103,7 @@
     alert: '<path d="M12 4 3 20h18L12 4zM12 10v5M12 17.5v.5"/>',
     dots: '<circle cx="5" cy="12" r="1.6" fill="currentColor"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/><circle cx="19" cy="12" r="1.6" fill="currentColor"/>',
     rows: '<path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r="1"/><circle cx="4.5" cy="12" r="1"/><circle cx="4.5" cy="18" r="1"/>',
+    lock: '<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
     gear: '<path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/>',
     mail: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m4 7 8 6 8-6"/>',
     gift: '<rect x="4" y="10" width="16" height="10" rx="1"/><path d="M3 7h18v3H3zM12 7v13M12 7c-2-4-6-3-5 0M12 7c2-4 6-3 5 0"/>'
@@ -358,7 +359,7 @@
       <label class="switchrow"><span><b>${T('טקסט גדול')}</b><small>${T('הגדלת כל הכתב באפליקציה')}</small></span><input id="bigtext" type="checkbox" ${S.bigText ? 'checked' : ''}><i></i></label>
       <div class="field"><span class="lbl">${T('שפה')} · Language</span><div class="seg two"><button class="${LANG === 'he' ? 'on' : ''}" data-act="lang" data-l="he">${T('עברית')}</button><button class="${LANG === 'en' ? 'on' : ''}" data-act="lang" data-l="en">English</button></div></div>
       <h3 class="h3">${T('פרטיות')}</h3>
-      <div class="notes"><b>${T('האפליקציה לא אוספת עליכם מידע.')}</b><br>${T('אין הרשמה ואין חשבון. המיקום משמש רק לחישוב מרחקים וזמנים בתוך המכשיר ואינו נשלח לשום מקום. המקוואות השמורים ותוכנית הנופש נשמרים במכשיר בלבד.')}</div>
+      <div class="notes"><b>${T('האפליקציה לא אוספת עליכם מידע.')}</b><br>${T('אין הרשמה ואין חשבון. המיקום משמש רק לחישוב מרחקים וזמנים בתוך המכשיר ואינו נשלח לשום מקום. המקוואות השמורים ותוכנית הנופש נשמרים במכשיר בלבד.')} ${T('גם האזור האישי נשמר במכשיר בלבד, מוצפן ונעול בקוד אישי.')}</div>
       <h3 class="h3">${T('על המאגר')}</h3>
       <div class="notes">${T('המאגר כולל את המקוואות המופיעים באתר המרכז הארצי למען טהרת המשפחה. בכל דף מקווה מצוין אם הוא בפיקוח ועד הכשרות של המרכז. המידע נשמר במכשיר וזמין גם בלי קליטה.')}</div>
       <button class="btn ghost wide" data-act="tab" data-tab="rabbis">${icon('chat')}${T('יצירת קשר')}</button>
@@ -540,9 +541,86 @@
     </div>`;
   }
 
+  /* ---------- האזור האישי: נתונים במכשיר בלבד, מוצפנים ונעולים בקוד אישי (js/vault.js) ---------- */
+  const Vault = window.Vault;
+  const P = { mode: null, msg: '', bad: false, busy: false };
+  const pzReset = () => { P.mode = null; P.msg = ''; P.bad = false; P.busy = false; };
+  const fWait = (ms) => (ms < 60000 ? `${Math.ceil(ms / 1000)} ${T('שניות')}` : fMin(Math.ceil(ms / 60000)));
+  const pinField = (id, label, auto) => `<label class="field"><span class="lbl">${label}</span><input id="${id}" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="8" autocomplete="${auto}" dir="ltr"></label>`;
+  const pzMsg = () => (P.msg ? `<div class="banner${P.bad ? ' bad' : ''}" role="alert">${icon(P.bad ? 'alert' : 'info')}<span>${esc(P.msg)}</span></div>` : '');
+  const pzBtn = (act, label, cls = '') => `<button class="btn wide ${cls}" data-act="${act}" data-primary ${P.busy ? 'disabled' : ''}>${P.busy ? T('רגע…') : label}</button>`;
+  function viewPersonal() {
+    if (!Vault || !Vault.available()) return `<div class="pad pz"><div class="banner bad">${icon('alert')}<span>${T('הדפדפן או המכשיר הזה אינם מאפשרים אחסון מוצפן, ולכן האזור האישי אינו זמין כאן.')}</span></div></div>`;
+    if (P.mode === 'wipe') return `<div class="pad pz">
+      <div class="banner bad">${icon('alert')}<span><b>${T('מחיקת האזור האישי')}</b><br>${T('כל המידע שבאזור האישי יימחק מהמכשיר לצמיתות. אי אפשר לשחזר אותו.')}</span></div>
+      <button class="btn wide danger" data-act="pzwipe">${T('מחיקה לצמיתות')}</button>
+      <button class="btn ghost wide" data-act="pzmode" data-m="">${T('ביטול')}</button></div>`;
+    if (!Vault.exists()) return `<div class="pad pz">
+      <div class="notes pzprivacy"><b>${icon('lock')}${T('לפני שמתחילים: הפרטיות שלכם')}</b>
+        <ul>
+          <li><b>${T('הכול נשאר במכשיר הזה בלבד.')}</b> ${T('שום פרט מהאזור האישי אינו נשלח לשרת, לענן, למרכז או לכל גורם אחר.')}</li>
+          <li><b>${T('המידע מוצפן ונפתח רק בקוד אישי.')}</b> ${T('הקוד עצמו אינו נשמר בשום מקום, וגם לנו אין גישה אליו או למידע.')}</li>
+          <li><b>${T('אין שחזור קוד.')}</b> ${T('אם הקוד נשכח, אפשר רק למחוק את האזור האישי ולהתחיל מחדש.')}</li>
+          <li><b>${T('אין גיבוי.')}</b> ${T('מחיקת האפליקציה או נתוני הדפדפן, או מעבר למכשיר אחר, מוחקים את המידע.')}</li>
+          <li><b>${T('נעילה אוטומטית.')}</b> ${T('האזור ננעל ביציאה מהמסך או מהאפליקציה.')}</li>
+        </ul>
+        <small>${T('קוד קצר מגן בעיקר מפני מי שמחזיק את המכשיר לרגע. מומלץ לבחור 6 ספרות או יותר, וקוד שונה מקוד הנעילה של המכשיר.')}</small></div>
+      <div class="form">
+        ${pinField('pz-new', T('בחירת קוד אישי (4 עד 8 ספרות)'), 'new-password')}
+        ${pinField('pz-new2', T('הקלדת הקוד שוב'), 'new-password')}
+        ${pzMsg()}
+        ${pzBtn('pzsetup', T('הבנתי — יצירת האזור האישי'))}
+      </div></div>`;
+    if (!Vault.isUnlocked()) return `<div class="pad pz">
+      <div class="form">
+        <p class="lead">${icon('lock')} ${T('האזור האישי נעול. המידע נשמר במכשיר הזה בלבד.')}</p>
+        ${pinField('pz-pin', T('קוד אישי'), 'current-password')}
+        ${pzMsg()}
+        ${pzBtn('pzunlock', T('פתיחה'))}
+      </div>
+      <button class="link center" data-act="pzmode" data-m="wipe">${T('שכחתי את הקוד')}</button></div>`;
+    if (P.mode === 'change') return `<div class="pad pz">
+      <div class="form">
+        ${pinField('pz-old', T('הקוד הנוכחי'), 'current-password')}
+        ${pinField('pz-new', T('קוד חדש (4 עד 8 ספרות)'), 'new-password')}
+        ${pinField('pz-new2', T('הקלדת הקוד החדש שוב'), 'new-password')}
+        ${pzMsg()}
+        ${pzBtn('pzchange', T('החלפת הקוד'))}
+        <button class="btn ghost wide" data-act="pzmode" data-m="">${T('ביטול')}</button>
+      </div></div>`;
+    return `<div class="pad pz">
+      ${pzMsg()}
+      <div class="empty">${icon('lock')}<br>${T('האזור האישי פתוח. עדיין אין בו תוכן.')}</div>
+      <h3 class="h3">${T('אבטחה ופרטיות')}</h3>
+      <div class="notes">${T('המידע באזור האישי נשמר מוצפן במכשיר הזה בלבד ואינו נשלח לשום מקום. אין גיבוי ואין שחזור קוד.')}</div>
+      <div class="menu">
+        <button data-act="pzlock"><i>${icon('lock')}</i><span><b>${T('נעילה עכשיו')}</b><small>${T('האזור ננעל גם לבד ביציאה מהמסך')}</small></span></button>
+        <button data-act="pzmode" data-m="change"><i>${icon('gear')}</i><span><b>${T('החלפת הקוד האישי')}</b></span>${icon('back', 'chev')}</button>
+        <button data-act="pzmode" data-m="wipe"><i>${icon('alert')}</i><span><b>${T('מחיקת כל המידע האישי')}</b><small>${T('מחיקה מלאה מהמכשיר, בלי אפשרות שחזור')}</small></span>${icon('back', 'chev')}</button>
+      </div></div>`;
+  }
+  /* פעולות הכספת אסינכרוניות (גזירת המפתח אורכת כשנייה); בזמן העבודה הכפתור מושבת */
+  function pzRun(job) {
+    if (P.busy) return;
+    let run; try { run = Promise.resolve(job()); } catch (e) { run = Promise.reject(e); }   // הקוד נקרא מהשדות לפני שהמסך מצויר מחדש
+    P.busy = true; P.msg = ''; P.bad = false; render(true);
+    run.then((ok) => { P.busy = false; if (ok) { P.mode = null; P.msg = ok === true ? '' : ok; } }, (e) => {
+      P.busy = false; P.bad = true;
+      P.msg = e.code === 'wait' ? `${T('יותר מדי ניסיונות. אפשר לנסות שוב בעוד')} ${fWait(e.wait)}.`
+        : e.code === 'wrong' ? (e.wait ? `${T('קוד שגוי. אפשר לנסות שוב בעוד')} ${fWait(e.wait)}.` : `${T('קוד שגוי. ניסיונות שנותרו לפני השהיה:')} ${e.triesLeft}`)
+        : e.code === 'badpin' ? T('הקוד צריך להיות 4 עד 8 ספרות.')
+        : e.code === 'mismatch' ? T('שני הקודים אינם זהים.')
+        : e.code === 'storage' ? T('לא ניתן לשמור במכשיר (ייתכן שהאחסון מלא או חסום, למשל בגלישה פרטית).')
+        : T('הפעולה נכשלה. נסו שוב.');
+    }).then(() => { if (S.page === 'personal') { render(true); const i = $('.pz input'); if (i && P.bad) i.focus(); } });
+  }
+  const pzNewPin = () => { const a = $('#pz-new').value, b = $('#pz-new2').value; if (!Vault.validPin(a)) throw Object.assign(new Error(), { code: 'badpin' }); if (a !== b) throw Object.assign(new Error(), { code: 'mismatch' }); return a; };
+  function pzLock() { if (Vault) Vault.lock(); pzReset(); }
+
   /* ---------- לשונית "עוד" ---------- */
   function viewMore() {
     const rows = [
+      ['personal', 'האזור האישי', 'lock', T('במכשיר בלבד, נעול בקוד אישי')],
       ['times', 'זמני השקיעה', 'sun', S.loc ? T('היום') + ' ' + sunsetStr(today, S.loc) + ' · ' + esc(S.loc.label) : T('לפי המיקום שלך')],
       ['trip', 'תכנון נופש', 'bag', T('מקוואות ביעד ובדרך')],
       ['updates', 'עדכונים', 'bell', UPDATES.length ? UPDATES.length + ' ' + T('הודעות') : T('שינויי שעות וסגירות')],
@@ -560,7 +638,7 @@
   /*noT*/ const TABS = [['list', 'מקוואות', 'search'], ['favs', 'השמורים שלי', 'heart'], ['rabbis', 'שאלה לרב', 'chat'], ['more', 'עוד', 'dots']];
   const TABVIEWS = { list: viewList, favs: viewFavs, rabbis: viewRabbis, more: viewMore };
   /* דפים שנפתחים מתוך "עוד" (עם כפתור חזרה) */
-  /*noT*/ const PAGES = { trip: [viewTrip, 'תכנון נופש'], times: [viewTimes, 'זמני השקיעה'], updates: [viewUpdates, 'עדכונים'], about: [viewAbout, 'אודות והגדרות'], admin: [viewAdmin, 'אזור מנהלים'] };
+  /*noT*/ const PAGES = { trip: [viewTrip, 'תכנון נופש'], times: [viewTimes, 'זמני השקיעה'], updates: [viewUpdates, 'עדכונים'], about: [viewAbout, 'אודות והגדרות'], personal: [viewPersonal, 'האזור האישי'], admin: [viewAdmin, 'אזור מנהלים'] };
   const unseen = () => UPDATES.length && UPDATES[0].date > S.seen;
   function shell() {
     $('#app').innerHTML = `
@@ -577,6 +655,7 @@
   function render() {
     const v = $('#view'), top = v.scrollTop, key = screenKey(), same = v.dataset.key === key;
     $('#app').classList.toggle('big', S.bigText);
+    if (S.page !== 'personal' && Vault && (Vault.isUnlocked() || P.mode || P.msg)) pzLock();   // יציאה מהמסך נועלת
     v.innerHTML = S.page ? pageView() : TABVIEWS[S.tab]();
     v.dataset.key = key;
     if (!S.page && S.tab === 'list') renderList();
@@ -664,6 +743,12 @@
     if (a === 'tab') goTab(d.tab);
     else if (a === 'page') openPage(d.p);
     else if (a === 'closepage') closePage();
+    else if (a === 'pzmode') { P.mode = d.m || null; P.msg = ''; P.bad = false; render(true); }
+    else if (a === 'pzlock') { pzLock(); render(true); }
+    else if (a === 'pzwipe') { Vault.wipe(); pzReset(); render(true); toast(T('האזור האישי נמחק מהמכשיר')); }
+    else if (a === 'pzsetup') pzRun(() => { const pin = pzNewPin(); return Vault.create(pin, {}).then(() => true); });
+    else if (a === 'pzunlock') { const pin = $('#pz-pin').value; pzRun(() => Vault.unlock(pin).then(() => true)); }
+    else if (a === 'pzchange') { const old = $('#pz-old').value; pzRun(() => { const pin = pzNewPin(); return Vault.changePin(old, pin).then(() => T('הקוד הוחלף')); }); }
     else if (a === 'mode') { if (S.mode !== d.m) { S.mode = d.m; render(); } }
     else if (a === 'setmine') { S.mine = d.id; store.set('mine', S.mine); render(); toast(T('נקבע כמקווה שלי')); }
     else if (a === 'open') openDetail(d.id);
@@ -724,9 +809,15 @@
   });
   document.addEventListener('keydown', (e) => {
     if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('g[data-act]')) { e.preventDefault(); e.target.dispatchEvent(new MouseEvent('click', { bubbles: true })); }
+    if (e.key === 'Enter' && e.target.matches('.pz input')) { e.preventDefault(); const b = $('.pz [data-primary]'); if (b) b.click(); }
     if (e.key !== 'Escape') return;
     if (S.sheet) { S.sheet = null; render(true); } else if (S.detail) closeDetail(); else if (S.page) closePage();
   });
+
+  /* האפליקציה עוברת לרקע או נסגרת: האזור האישי ננעל */
+  const pzAway = () => { if (Vault && Vault.isUnlocked()) { pzLock(); if (S.page === 'personal') render(true); } };
+  document.addEventListener('visibilitychange', () => { if (document.hidden) pzAway(); });
+  window.addEventListener('pagehide', pzAway);
 
   shell();
   applyHash(location.hash.slice(1));
